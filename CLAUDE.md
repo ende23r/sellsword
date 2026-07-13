@@ -34,6 +34,7 @@ This repo uses **Jujutsu (`jj`)** instead of git. Use `jj` commands for version 
 `src/index.ts` auto-loads all files from `src/commands/` at startup. To add a new command, create a file in `src/commands/` that exports a default object satisfying the `Command` interface (`src/types.ts`), then run `npm run deploy` to register it with Discord. Set `allowInPause: true` on any command that should work in pause mode.
 
 Key libraries:
+
 - `better-sqlite3` — synchronous SQLite; schema is initialized on first import of `src/lib/db.ts`
 - `googleapis` — Google Sheets and Drive; credentials configured via `GOOGLE_SERVICE_ACCOUNT_KEY`
 - `@resvg/resvg-js` — SVG→PNG rendering (WASM-based, no system lib deps); used by `/map`

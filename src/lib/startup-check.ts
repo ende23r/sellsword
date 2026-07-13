@@ -1,0 +1,178 @@
+import { existsSync, readFileSync } from 'fs';
+import { google } from 'googleapis';
+import type { Client } from 'discord.js';
+
+type CheckResult = { label: string; ok: boolean; detail?: string };
+
+function warn(results: CheckResult[]): void {
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length === 0) {
+    console.log('✅ Startup checks passed.');
+    return;
+  }
+  console.warn(`\n⚠️  ${failed.length} startup check(s) failed:\n`);
+  for (const r of failed) {
+    console.warn(`  ✗ ${r.label}${r.detail ? `: ${r.detail}` : ''}`);
+  }
+  console.warn('');
+}
+
+// ── Env / config checks (synchronous) ────────────────────────────────────
+
+function checkEnvVars(): CheckResult[] {
+  const required: [string, string][] = [
+    ['DISCORD_TOKEN', 'needed to log in to Discord'],
+    ['DISCORD_APP_ID', 'needed for slash command registration'],
+    ['DISCORD_GUILD_ID', 'needed for slash command registration'],
+    ['ADMIN_CHANNEL_ID', 'needed for admin notifications and daily updates'],
+    ['SCHEDULE_TIMEZONE', 'needed for daily update scheduling'],
+    ['GOOGLE_SERVICE_ACCOUNT_KEY', 'needed for Google Sheets integration'],
+    ['ADMIN_SHEET_ID', 'needed to log queue entries and messages'],
+    ['ARMY_SHEET_TEMPLATE_ID', 'needed by /commission to copy army sheets'],
+  ];
+  return required.map(([key, detail]) => ({
+    label: `env: ${key}`,
+    ok: !!process.env[key],
+    detail: process.env[key] ? undefined : detail,
+  }));
+}
+
+function checkTimezone(): CheckResult {
+  const tz = process.env.SCHEDULE_TIMEZONE;
+  if (!tz) return { label: 'SCHEDULE_TIMEZONE is a valid IANA timezone', ok: false };
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return { label: `SCHEDULE_TIMEZONE "${tz}" is a valid IANA timezone`, ok: true };
+  } catch {
+    return {
+      label: `SCHEDULE_TIMEZONE "${tz}" is a valid IANA timezone`,
+      ok: false,
+      detail:
+        'unrecognized timezone — check https://en.wikipedia.org/wiki/List_of_tz_database_time_zones',
+    };
+  }
+}
+
+function checkServiceAccountKey(): {
+  ok: boolean;
+  auth?: InstanceType<typeof google.auth.GoogleAuth>;
+} {
+  const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!keyPath) return { ok: false };
+  if (!existsSync(keyPath)) return { ok: false };
+  try {
+    const key = JSON.parse(readFileSync(keyPath, 'utf-8'));
+    const auth = new google.auth.GoogleAuth({
+      credentials: key,
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive',
+      ],
+    });
+    return { ok: true, auth };
+  } catch {
+    return { ok: false };
+  }
+}
+
+// ── Async checks (API calls) ──────────────────────────────────────────────
+
+async function checkAdminSheet(
+  auth: InstanceType<typeof google.auth.GoogleAuth>,
+): Promise<CheckResult> {
+  const sheetId = process.env.ADMIN_SHEET_ID;
+  if (!sheetId)
+    return { label: 'Admin sheet is accessible', ok: false, detail: 'ADMIN_SHEET_ID not set' };
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    const res = await sheets.spreadsheets.get({
+      spreadsheetId: sheetId,
+      fields: 'spreadsheetId,properties.title',
+    });
+    return { label: `Admin sheet "${res.data.properties?.title}" is accessible`, ok: true };
+  } catch (err) {
+    return {
+      label: 'Admin sheet is accessible',
+      ok: false,
+      detail: (err as Error).message,
+    };
+  }
+}
+
+async function checkArmySheetTemplate(
+  auth: InstanceType<typeof google.auth.GoogleAuth>,
+): Promise<CheckResult> {
+  const templateId = process.env.ARMY_SHEET_TEMPLATE_ID;
+  if (!templateId)
+    return {
+      label: 'Army sheet template is accessible',
+      ok: false,
+      detail: 'ARMY_SHEET_TEMPLATE_ID not set',
+    };
+  try {
+    const drive = google.drive({ version: 'v3', auth });
+    const res = await drive.files.get({ fileId: templateId, fields: 'id,name' });
+    return { label: `Army sheet template "${res.data.name}" is accessible`, ok: true };
+  } catch (err) {
+    return {
+      label: 'Army sheet template is accessible',
+      ok: false,
+      detail: (err as Error).message,
+    };
+  }
+}
+
+// ── Discord checks (run after ClientReady) ────────────────────────────────
+
+export async function checkAdminChannel(client: Client): Promise<void> {
+  const channelId = process.env.ADMIN_CHANNEL_ID;
+  if (!channelId) return; // already caught by env check
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isTextBased()) {
+      console.warn(`⚠️  ADMIN_CHANNEL_ID ${channelId} exists but is not a text channel.`);
+    }
+  } catch {
+    console.warn(
+      `⚠️  Could not fetch ADMIN_CHANNEL_ID ${channelId} — does the bot have access to that channel?`,
+    );
+  }
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────
+
+export async function runStartupChecks(): Promise<void> {
+  console.log('Running startup checks…');
+
+  const results: CheckResult[] = [...checkEnvVars(), checkTimezone()];
+
+  const { ok: keyOk, auth } = checkServiceAccountKey();
+  results.push({
+    label: 'Service account key file is readable and valid JSON',
+    ok: keyOk,
+    detail: keyOk ? undefined : 'check GOOGLE_SERVICE_ACCOUNT_KEY path',
+  });
+
+  if (auth) {
+    const [adminSheet, template] = await Promise.all([
+      checkAdminSheet(auth),
+      checkArmySheetTemplate(auth),
+    ]);
+    results.push(adminSheet, template);
+  } else {
+    results.push(
+      {
+        label: 'Admin sheet is accessible',
+        ok: false,
+        detail: 'skipped (no valid service account key)',
+      },
+      {
+        label: 'Army sheet template is accessible',
+        ok: false,
+        detail: 'skipped (no valid service account key)',
+      },
+    );
+  }
+
+  warn(results);
+}

@@ -47,6 +47,7 @@ Copy `.env.example` to `.env` and fill in:
 ### Discord permissions
 
 The bot needs these permissions in addition to `Send Messages`:
+
 - `Manage Roles` — for `/recruit` (assigning faction roles)
 - `Manage Channels` — for `/commission` (creating army channels)
 
