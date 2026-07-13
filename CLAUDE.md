@@ -19,6 +19,10 @@ npm run format       # format all files with Prettier
 
 Requires a `.env` file — copy `.env.example` and fill in the three values.
 
+## Ways of working
+
+There are two equally valid outcomes in this project: committing working code, and writing up a clear report when progress is blocked. If something can't move forward — missing credentials, an unresolved design question, an unexpected circumstance — the right move is to document what happened and what's needed, not to push through with assumptions. Surfacing unknowns early is as valuable as shipping code.
+
 ## Version Control
 
 This repo uses **Jujutsu (`jj`)** instead of git. Use `jj` commands for version control operations rather than `git`.
