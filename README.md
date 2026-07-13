@@ -7,6 +7,7 @@ A Discord bot for running Cataphracts.
 Game state (armies, commanders, hex map, orders, forage counts) lives in a local **SQLite** database. The bot is the only writer; nothing else touches it directly.
 
 **Google Sheets** handles the human-readable layer:
+
 - One **admin sheet** with multiple tabs: queue, message log, and a global army overview
 - One **army sheet per commander**, copied from a template at commission time, tracking that commander's army stats
 
@@ -16,15 +17,15 @@ The bot reads and writes Sheets via a Google service account. The mapping from D
 
 Copy `.env.example` to `.env` and fill in:
 
-| Variable | Description |
-|---|---|
-| `DISCORD_TOKEN` | Bot token from the Discord Developer Portal |
-| `DISCORD_APP_ID` | Application ID from the Discord Developer Portal |
-| `DISCORD_GUILD_ID` | Your Discord server ID |
-| `SCHEDULE_TIMEZONE` | IANA timezone for daily updates (e.g. `America/New_York`) |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | Path to the service account JSON key file |
-| `ADMIN_SHEET_ID` | Sheet ID of the admin Google Sheet |
-| `ARMY_SHEET_TEMPLATE_ID` | Sheet ID of the army sheet template, copied at commission time |
+| Variable                     | Description                                                    |
+| ---------------------------- | -------------------------------------------------------------- |
+| `DISCORD_TOKEN`              | Bot token from the Discord Developer Portal                    |
+| `DISCORD_APP_ID`             | Application ID from the Discord Developer Portal               |
+| `DISCORD_GUILD_ID`           | Your Discord server ID                                         |
+| `SCHEDULE_TIMEZONE`          | IANA timezone for daily updates (e.g. `America/New_York`)      |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | Path to the service account JSON key file                      |
+| `ADMIN_SHEET_ID`             | Sheet ID of the admin Google Sheet                             |
+| `ARMY_SHEET_TEMPLATE_ID`     | Sheet ID of the army sheet template, copied at commission time |
 
 ## Setup
 
@@ -43,13 +44,46 @@ Copy `.env.example` to `.env` and fill in:
 3. Create the admin sheet and the army sheet template. Share both with the service account's email (editor access).
 4. Set `ADMIN_SHEET_ID` and `ARMY_SHEET_TEMPLATE_ID` to the respective Sheet IDs (the long string in each sheet's URL).
 
+### Discord permissions
+
+The bot needs these permissions in addition to `Send Messages`:
+- `Manage Roles` — for `/recruit` (assigning faction roles)
+- `Manage Channels` — for `/commission` (creating army channels)
+
+Add them in the OAuth2 → URL Generator step.
+
+### Map
+
+Create the map data file and seed the database:
+
+```
+cp map-seed.example.json map-seed.json
+# edit map-seed.json with your hex data
+npm run seed
+```
+
 ### Run the bot
 
 ```
 npm install
 npm run deploy   # register slash commands (run once, or after adding/changing commands)
+npm run seed     # load map data (run once, or after editing map-seed.json)
 npm run dev      # start the bot
 ```
+
+### TODO(eric): Google Sheets credentials
+
+The Sheets integration is implemented in `src/lib/sheets.ts` and is used by `/queue`, `/message`, `/commission`, and the daily update. To wire it up:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com) and create a project.
+2. Enable the **Google Sheets API** and the **Google Drive API**.
+3. Go to **IAM & Admin → Service Accounts → Create Service Account**.
+4. After creating it, go to **Actions → Manage Keys → Add Key → JSON**. Download the file.
+5. Save the JSON key somewhere on disk (e.g. `~/.config/sellsword/service-account.json`) and set `GOOGLE_SERVICE_ACCOUNT_KEY` to that path.
+6. Create your admin Google Sheet (with tabs: `Queue`, `Messages`) and your army sheet template.
+7. Share both sheets with the service account's `client_email` (found in the JSON key file) — grant **Editor** access.
+8. Set `ADMIN_SHEET_ID` and `ARMY_SHEET_TEMPLATE_ID` to the Sheet IDs from their URLs.
+9. In `src/lib/sheets.ts`, update `ARMY_SHEET_CELLS` to match the cell layout of your army sheet template.
 
 ## Pause mode
 
@@ -85,6 +119,4 @@ Runs three times per day at **6 AM, 2 PM, and 10 PM** in the configured timezone
 
 ## Open questions
 
-- Which commands count as "status queries" in pause mode and are allowed through?
-- When a commander is commissioned, does the bot own the copied army sheet via the service account, or does it transfer ownership/sharing to the player? (Affects whether players can edit their own sheet.)
-- Map rendering: generated image posted to Discord vs. text/embed representation?
+- Which additional commands should work in pause mode? Currently only `/map` has `allowInPause: true`. Mark any read-only commands in `src/commands/` the same way.

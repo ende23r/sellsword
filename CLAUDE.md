@@ -12,7 +12,9 @@ SELLSWORD is a Discord bot for running the Cataphracts play-by-post wargame. The
 npm install          # install dependencies
 npm run dev          # run bot locally with watch mode (auto-restarts on file changes)
 npm start            # run bot without watch mode
+npm start -- --paused  # start in pause mode (status queries only, no orders or daily updates)
 npm run deploy       # register slash commands with Discord (run once, or after adding/changing commands)
+npm run seed         # seed the SQLite database from map-seed.json
 npm run typecheck    # type-check without emitting
 npm run format       # format all files with Prettier
 ```
@@ -29,7 +31,15 @@ This repo uses **Jujutsu (`jj`)** instead of git. Use `jj` commands for version 
 
 ## Code Architecture
 
-`src/index.ts` auto-loads all files from `src/commands/` at startup. To add a new command, create a file in `src/commands/` that exports a default object satisfying the `Command` interface (`src/types.ts`), then run `npm run deploy` to register it with Discord.
+`src/index.ts` auto-loads all files from `src/commands/` at startup. To add a new command, create a file in `src/commands/` that exports a default object satisfying the `Command` interface (`src/types.ts`), then run `npm run deploy` to register it with Discord. Set `allowInPause: true` on any command that should work in pause mode.
+
+Key libraries:
+- `better-sqlite3` — synchronous SQLite; schema is initialized on first import of `src/lib/db.ts`
+- `googleapis` — Google Sheets and Drive; credentials configured via `GOOGLE_SERVICE_ACCOUNT_KEY`
+- `@resvg/resvg-js` — SVG→PNG rendering (WASM-based, no system lib deps); used by `/map`
+- `node-cron` — daily update scheduler (6 AM / 2 PM / 10 PM in `SCHEDULE_TIMEZONE`)
+
+Map data lives in `map-seed.json` (copy from `map-seed.example.json`). The seed script (`npm run seed`) is idempotent — re-running it updates existing hexes in place.
 
 ## Game Domain (for implementing bot logic)
 

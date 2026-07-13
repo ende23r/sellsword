@@ -1,0 +1,76 @@
+{
+  "_comment": "Copy this file to map-seed.json and fill in your hex data. Run: npm run seed",
+  "meta": {
+    "name": "Campaign Map",
+    "hex_size_miles": 6
+  },
+  "hexes": [
+    {
+      "q": 0,
+      "r": 0,
+      "terrain": "city",
+      "_comment_terrain": "flatland | hills | forest | mountains | marsh | coast | sea",
+      "settlement": 300,
+      "roads": ["NE", "S"],
+      "_comment_roads": "Directions with road connections: N | NE | SE | S | SW | NW",
+      "rivers": ["NW"],
+      "_comment_rivers": "Same direction format as roads; indicates river on that hex edge",
+      "stronghold": {
+        "name": "Vortoszol",
+        "type": "city",
+        "_comment_type": "city | town | fortress",
+        "garrison": 1000,
+        "threshold": 15,
+        "controlled_by": null,
+        "_comment_controlled_by": "Discord faction role ID, or null if uncontrolled"
+      }
+    },
+    {
+      "q": 1,
+      "r": -1,
+      "terrain": "hills",
+      "settlement": 40,
+      "roads": ["SW"],
+      "rivers": []
+    },
+    {
+      "q": 0,
+      "r": 1,
+      "terrain": "flatland",
+      "settlement": 60,
+      "roads": ["N", "SE"],
+      "rivers": [],
+      "stronghold": {
+        "name": "Mirsk",
+        "type": "town",
+        "garrison": 500,
+        "threshold": 10,
+        "controlled_by": null
+      }
+    },
+    {
+      "q": -1,
+      "r": 0,
+      "terrain": "forest",
+      "settlement": 20,
+      "roads": [],
+      "rivers": ["SE"]
+    },
+    {
+      "q": 1,
+      "r": 0,
+      "terrain": "coast",
+      "settlement": 50,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 0,
+      "r": -1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    }
+  ]
+}

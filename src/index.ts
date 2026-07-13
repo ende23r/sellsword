@@ -3,9 +3,13 @@ import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
 import { readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { startScheduler } from './lib/scheduler.js';
 import type { Command } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const PAUSED = process.argv.includes('--paused');
+if (PAUSED) console.log('⏸  Bot started in PAUSE MODE — orders and updates are suspended.');
 
 const commands = new Collection<string, Command>();
 for (const file of readdirSync(join(__dirname, 'commands')).filter((f) => f.endsWith('.ts'))) {
@@ -18,6 +22,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, (c) => {
   console.log(`Ready! Logged in as ${c.user.tag}`);
+  if (!PAUSED) startScheduler(c);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -25,6 +30,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   const command = commands.get(interaction.commandName);
   if (!command) return;
+
+  if (PAUSED && !command.allowInPause) {
+    await interaction.reply({
+      content: '⏸ The game is currently paused. Orders and updates are suspended.',
+      ephemeral: true,
+    });
+    return;
+  }
 
   try {
     await command.execute(interaction);
