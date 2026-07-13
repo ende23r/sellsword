@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx index.ts",
-    "deploy": "tsx deploy.ts"
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "deploy": "tsx src/deploy.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "discord.js": "^14.16.0",
@@ -12,6 +15,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "prettier": "^3.9.5",
     "tsx": "^4.23.0",
     "typescript": "^7.0.2"
   }

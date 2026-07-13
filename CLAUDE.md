@@ -10,8 +10,11 @@ SELLSWORD is a Discord bot for running the Cataphracts play-by-post wargame. The
 
 ```bash
 npm install          # install dependencies
-npm run deploy       # register slash commands with Discord (run once, or after adding commands)
-npm start            # run the bot locally
+npm run dev          # run bot locally with watch mode (auto-restarts on file changes)
+npm start            # run bot without watch mode
+npm run deploy       # register slash commands with Discord (run once, or after adding/changing commands)
+npm run typecheck    # type-check without emitting
+npm run format       # format all files with Prettier
 ```
 
 Requires a `.env` file — copy `.env.example` and fill in the three values.
@@ -19,6 +22,10 @@ Requires a `.env` file — copy `.env.example` and fill in the three values.
 ## Version Control
 
 This repo uses **Jujutsu (`jj`)** instead of git. Use `jj` commands for version control operations rather than `git`.
+
+## Code Architecture
+
+`src/index.ts` auto-loads all files from `src/commands/` at startup. To add a new command, create a file in `src/commands/` that exports a default object satisfying the `Command` interface (`src/types.ts`), then run `npm run deploy` to register it with Discord.
 
 ## Game Domain (for implementing bot logic)
 
