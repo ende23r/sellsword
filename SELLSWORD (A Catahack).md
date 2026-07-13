@@ -1,6 +1,6 @@
 # SELLSWORD (a Catahack)
 
-_Original Sam Sorensen, March 2025\. Updated to v1.2 March 2026; v1.1 July 2025\._
+_CATAPHRACT by Sam Sorensen, March 2025\. Updated to v1.2 March 2026; v1.1 July 2025\._
 
 \[In this hack, original rules removed will appear struck through and colored red, while new rules will appear in blue text. Explanatory notes will appear in square brackets and highlighted in yellow.\]
 
@@ -242,28 +242,28 @@ Militant holy orders serve at the behest of religious leaders, but typically liv
 
 Other special armies may be present, depending on the campaign, faction, and circumstance.
 
-### COMMANDER TRAITS
+### ~~COMMANDER TRAITS~~
 
-1. _Beloved._ Your army gains \+1 resting morale.
-2. _Brutal._ Strongholds you besiege lower their threshold by an extra \-1/week.
-3. _Commando._ You can designate one detachment in your army as skirmishers.
-4. _Crusader._ Your army gains a \+1 bonus in battles against heretics and infidels.
-5. _Defensive Engineer._ When you defend a stronghold in an assault, add \+2 to the garrison’s defensive bonus.
-6. _Duelist._ You count as 10 years younger for the purposes of single combat, and win ties. \-1-in-6 chance to be captured in battle.
-7. _Guardian._ Your army suffers 5% fewer casualties in battle.
-8. _Honorable._ Your army never pillages unless you order them to. \-1-in-6 chance to spark a revolt when foraging, torching, or raising additional armies.
-9. _Ironsides._ When you defend a stronghold in a siege, add \+5 to its threshold.
-10. _Logistician._ Your army can carry 20% more total supplies. Your army stretches half as long on the road.
-11. _Outrider._ With a cavalry detachment, your scouting and foraging range expands to 3 hexes (an approximately 20-mile radius).
-12. _Poet._ Your morale rolls count as 2 higher for the purposes of determining failed morale consequences.
-13. _Raider._ 20% extra ~~loot~~ local goods found in captured strongholds. 10% extra supplies foraged.
-14. _Ranger._ Bad weather does not reduce your scouting ranges. Your scouts are visible to others only while within half their radius from your army.
-15. _Scholar._ ~~You can memorize spells like a wizard.~~ Revolts that you cause produce an army of half the normal size.
-16. _Siege Engineer._ You can construct a detachment of 10 siege engines in a week.
-17. _Spartan._ Your army has only half as many noncombatants attached. When you acquire new noncombatants, you pick up only half as many.
-18. _Stubborn._ Your army does not lose morale on defeat in battle.
-19. _Vanquisher._ You deal an extra 5% casualties to the enemy in battle. \+1-in-6 chance to capture enemy commanders in battle.
-20. _Veteran._ Your army never routs upon defeat in battle.
+1. ~~_Beloved._ Your army gains \+1 resting morale.~~
+2. ~~_Brutal._ Strongholds you besiege lower their threshold by an extra \-1/week.~~
+3. ~~_Commando._ You can designate one detachment in your army as skirmishers.~~
+4. ~~_Crusader._ Your army gains a \+1 bonus in battles against heretics and infidels.~~
+5. ~~_Defensive Engineer._ When you defend a stronghold in an assault, add \+2 to the garrison’s defensive bonus.~~
+6. ~~_Duelist._ You count as 10 years younger for the purposes of single combat, and win ties. \-1-in-6 chance to be captured in battle.~~
+7. ~~_Guardian._ Your army suffers 5% fewer casualties in battle.~~
+8. ~~_Honorable._ Your army never pillages unless you order them to. \-1-in-6 chance to spark a revolt when foraging, torching, or raising additional armies.~~
+9. ~~_Ironsides._ When you defend a stronghold in a siege, add \+5 to its threshold.~~
+10. ~~_Logistician._ Your army can carry 20% more total supplies. Your army stretches half as long on the road.~~
+11. ~~_Outrider._ With a cavalry detachment, your scouting and foraging range expands to 3 hexes (an approximately 20-mile radius).~~
+12. ~~_Poet._ Your morale rolls count as 2 higher for the purposes of determining failed morale consequences.~~
+13. ~~_Raider._ 20% extra ~~loot~~ local goods found in captured strongholds. 10% extra supplies foraged.~~
+14. ~~_Ranger._ Bad weather does not reduce your scouting ranges. Your scouts are visible to others only while within half their radius from your army.~~
+15. ~~_Scholar._ ~~You can memorize spells like a wizard.~~ Revolts that you cause produce an army of half the normal size.~~
+16. ~~_Siege Engineer._ You can construct a detachment of 10 siege engines in a week.~~
+17. ~~_Spartan._ Your army has only half as many noncombatants attached. When you acquire new noncombatants, you pick up only half as many.~~
+18. ~~_Stubborn._ Your army does not lose morale on defeat in battle.~~
+19. ~~_Vanquisher._ You deal an extra 5% casualties to the enemy in battle. \+1-in-6 chance to capture enemy commanders in battle.~~
+20. ~~_Veteran._ Your army never routs upon defeat in battle.~~
 
 # RULES FOR EVERYTHING ELSE
 
