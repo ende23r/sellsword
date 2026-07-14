@@ -100,13 +100,13 @@ export async function renderMap(
     // Settlement score label
     if (hex.settlement > 0) {
       labels.push(
-        `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.35).toFixed(1)}" text-anchor="middle" font-size="8" fill="#333" font-family="sans-serif">${hex.settlement}</text>`,
+        `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.35).toFixed(1)}" text-anchor="middle" font-size="12" fill="#333" font-family="sans-serif">${hex.settlement}</text>`,
       );
     }
 
     // Coordinates (small, top of hex)
     labels.push(
-      `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.55).toFixed(1)}" text-anchor="middle" font-size="7" fill="#666" font-family="monospace">${hex.q},${hex.r}</text>`,
+      `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.55).toFixed(1)}" text-anchor="middle" font-size="11" fill="#666" font-family="monospace">${hex.q},${hex.r}</text>`,
     );
 
     // Stronghold
@@ -114,8 +114,8 @@ export async function renderMap(
     if (stronghold) {
       const symbol = STRONGHOLD_SYMBOL[stronghold.type] ?? '?';
       labels.push(
-        `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.15).toFixed(1)}" text-anchor="middle" font-size="10" fill="#111" font-family="sans-serif">${symbol}</text>`,
-        `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.65).toFixed(1)}" text-anchor="middle" font-size="7" fill="#111" font-weight="bold" font-family="sans-serif">${stronghold.name}</text>`,
+        `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.15).toFixed(1)}" text-anchor="middle" font-size="15" fill="#111" font-family="sans-serif">${symbol}</text>`,
+        `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.65).toFixed(1)}" text-anchor="middle" font-size="11" fill="#111" font-weight="bold" font-family="sans-serif">${stronghold.name}</text>`,
       );
     }
   }
