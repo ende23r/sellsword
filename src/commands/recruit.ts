@@ -1,5 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
+import { notifyAdmin } from '../lib/admin-notify.js';
 import type { Command, QueueEntry } from '../types.js';
 
 const QUEUE_ROLE_NAME = 'Queued';
@@ -49,27 +50,16 @@ const recruit: Command = {
       return;
     }
 
-    // Assign faction role, remove queue role
     await member.roles.add(factionRole.id);
     const queueRole = guild.roles.cache.find((r) => r.name === QUEUE_ROLE_NAME);
     if (queueRole) await member.roles.remove(queueRole);
 
-    // Remove from queue table
     db.prepare('DELETE FROM queue WHERE discord_user_id = ?').run(userId);
 
-    const adminChannelId = process.env.ADMIN_CHANNEL_ID;
-    if (adminChannelId) {
-      try {
-        const ch = await interaction.client.channels.fetch(adminChannelId);
-        if (ch?.isTextBased()) {
-          await (ch as import('discord.js').TextChannel).send(
-            `✅ **${username}** recruited into faction **${factionRole.name}** by ${interaction.user}.`,
-          );
-        }
-      } catch {
-        // Non-fatal
-      }
-    }
+    await notifyAdmin(
+      interaction.client,
+      `✅ **${username}** recruited into faction **${factionRole.name}** by ${interaction.user}.`,
+    );
 
     await interaction.editReply(
       `✅ **${username}** has been recruited into **${factionRole.name}**.`,

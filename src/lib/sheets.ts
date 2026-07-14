@@ -14,17 +14,21 @@ import { readFileSync } from 'fs';
 import { google } from 'googleapis';
 import type { ArmyRow, CommanderRow } from './db.js';
 
-function getAuth() {
+let _auth: InstanceType<typeof google.auth.GoogleAuth> | null = null;
+
+function getAuth(): InstanceType<typeof google.auth.GoogleAuth> {
+  if (_auth) return _auth;
   const keyPath = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   if (!keyPath) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is not set in .env');
   const key = JSON.parse(readFileSync(keyPath, 'utf-8'));
-  return new google.auth.GoogleAuth({
+  _auth = new google.auth.GoogleAuth({
     credentials: key,
     scopes: [
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive',
     ],
   });
+  return _auth;
 }
 
 // ── Admin sheet helpers ────────────────────────────────────────────────────

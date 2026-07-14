@@ -1,5 +1,6 @@
 import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
+import { notifyAdmin } from '../lib/admin-notify.js';
 import { copyArmySheetTemplate } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
@@ -34,7 +35,6 @@ const commission: Command = {
     const startQ = interaction.options.getInteger('start_q', true);
     const startR = interaction.options.getInteger('start_r', true);
 
-    // Find the category for this faction (by convention: category name = role name)
     const category = guild.channels.cache.find(
       (c) => c.type === ChannelType.GuildCategory && c.name === factionRole.name,
     );
@@ -45,7 +45,6 @@ const commission: Command = {
       return;
     }
 
-    // Create the army channel
     const channelName = commanderUser.username.toLowerCase().replace(/[^a-z0-9]/g, '-');
     const channel = await guild.channels.create({
       name: `army-${channelName}`,
@@ -61,17 +60,14 @@ const commission: Command = {
       ],
     });
 
-    // Copy army sheet template
     let sheetUrl: string | null = null;
     try {
       const sheet = await copyArmySheetTemplate(`${armyName} (${commanderUser.username})`);
       sheetUrl = sheet.url;
     } catch (err) {
       console.error('Failed to copy army sheet template:', err);
-      // Continue without sheet — can be added manually
     }
 
-    // Upsert commander and army records
     const commanderStmt = db.prepare(`
       INSERT INTO commanders (discord_user_id, discord_channel_id, army_sheet_url)
       VALUES (?, ?, ?)
@@ -86,31 +82,19 @@ const commission: Command = {
       .get(commanderUser.id) as { id: number };
 
     db.prepare(
-      `
-      INSERT INTO armies (commander_id, name, hex_q, hex_r)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(commander_id) DO NOTHING
-    `,
+      `INSERT INTO armies (commander_id, name, hex_q, hex_r)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(commander_id) DO NOTHING`,
     ).run(commander.id, armyName, startQ, startR);
 
-    // Pin the army sheet URL in the channel
     if (sheetUrl) {
       await channel.send(`📋 **Army Sheet:** ${sheetUrl}`);
     }
 
-    const adminChannelId = process.env.ADMIN_CHANNEL_ID;
-    if (adminChannelId) {
-      try {
-        const ch = await interaction.client.channels.fetch(adminChannelId);
-        if (ch?.isTextBased()) {
-          await (ch as import('discord.js').TextChannel).send(
-            `⚔️ **${commanderUser.username}** commissioned as commander of **${armyName}** in faction **${factionRole.name}**. Channel: ${channel}${sheetUrl ? ` | Sheet: ${sheetUrl}` : ' | ⚠️ Sheet creation failed.'}`,
-          );
-        }
-      } catch {
-        // Non-fatal
-      }
-    }
+    await notifyAdmin(
+      interaction.client,
+      `⚔️ **${commanderUser.username}** commissioned as commander of **${armyName}** in faction **${factionRole.name}**. Channel: ${channel}${sheetUrl ? ` | Sheet: ${sheetUrl}` : ' | ⚠️ Sheet creation failed.'}`,
+    );
 
     await interaction.editReply(
       `✅ **${commanderUser.username}** commissioned!\nChannel: ${channel}\n${sheetUrl ? `Army sheet: ${sheetUrl}` : '⚠️ Army sheet creation failed — add manually.'}`,
