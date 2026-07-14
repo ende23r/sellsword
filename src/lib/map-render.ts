@@ -14,6 +14,16 @@ const TERRAIN_COLOR: Record<string, string> = {
   sea: '#5a7eb4',
 };
 
+// Corner index pairs for each edge direction (pointy-top hex, corners 0–5 at -30°,30°,90°,150°,210°,270°)
+const RIVER_EDGE_CORNERS: Record<string, [number, number]> = {
+  N:  [4, 5],
+  NE: [5, 0],
+  SE: [0, 1],
+  S:  [1, 2],
+  SW: [2, 3],
+  NW: [3, 4],
+};
+
 const STRONGHOLD_SYMBOL: Record<string, string> = {
   city: '⬛',
   town: '▪',
@@ -82,19 +92,15 @@ export async function renderMap(
       }
     }
 
-    // Rivers: draw along the hex edge toward each indicated direction
+    // Rivers: draw along the shared hex edge (between two corner points)
     const rivers: string[] = JSON.parse(hex.rivers);
     for (const dir of rivers) {
-      const neighbor = neighborCoordForDirection(hex.q, hex.r, dir);
-      const neighborHex = hexes.find((h) => h.q === neighbor.q && h.r === neighbor.r);
-      if (neighborHex) {
-        const [nx, ny] = hexToPixel(neighborHex, size, -minX, -minY);
-        const mx = (cx + nx) / 2;
-        const my = (cy + ny) / 2;
-        riverLines.push(
-          `<line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${mx.toFixed(1)}" y2="${my.toFixed(1)}" stroke="#3a7abf" stroke-width="2.5" stroke-linecap="round" opacity="0.8"/>`,
-        );
-      }
+      const edgeCorners = RIVER_EDGE_CORNERS[dir];
+      if (!edgeCorners) continue;
+      const [a, b] = [corners[edgeCorners[0]], corners[edgeCorners[1]]];
+      riverLines.push(
+        `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="#3a7abf" stroke-width="2.5" stroke-linecap="round" opacity="0.8"/>`,
+      );
     }
 
     // Settlement score label
