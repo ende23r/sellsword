@@ -126,11 +126,30 @@ export async function renderMap(
     // Stronghold
     const stronghold = strongholdByHexId.get(hex.id);
     if (stronghold) {
-      const symbol = STRONGHOLD_SYMBOL[stronghold.type] ?? '?';
-      labels.push(
-        `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.15).toFixed(1)}" text-anchor="middle" font-size="23" fill="#111" font-family="sans-serif">${symbol}</text>`,
-        `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.65).toFixed(1)}" text-anchor="middle" font-size="17" fill="#111" font-weight="bold" font-family="sans-serif">${stronghold.name}</text>`,
-      );
+      const nameLine = `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.65).toFixed(1)}" text-anchor="middle" font-size="17" fill="#111" font-weight="bold" font-family="sans-serif">${stronghold.name}</text>`;
+      if (stronghold.type === 'city') {
+        const r = size * 0.28;
+        const pcy = cy - size * 0.1;
+        labels.push(
+          `<polygon points="${pentagonPoints(cx, pcy, r)}" fill="#1a1a1a" stroke="#fff" stroke-width="1.5"/>`,
+          nameLine,
+        );
+      } else if (stronghold.type === 'town') {
+        // side = 3/4 of pentagon's side length (pentagon side = R * 2 * sin(π/5))
+        const half = size * 0.28 * Math.sin(Math.PI / 5) * 0.75;
+        const r = half;
+        const pcy = cy - size * 0.1;
+        labels.push(
+          `<rect x="${(cx - r).toFixed(1)}" y="${(pcy - r).toFixed(1)}" width="${(r * 2).toFixed(1)}" height="${(r * 2).toFixed(1)}" fill="#1a1a1a" stroke="#fff" stroke-width="1.5"/>`,
+          nameLine,
+        );
+      } else {
+        const symbol = STRONGHOLD_SYMBOL[stronghold.type] ?? '?';
+        labels.push(
+          `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.15).toFixed(1)}" text-anchor="middle" font-size="23" fill="#111" font-family="sans-serif">${symbol}</text>`,
+          nameLine,
+        );
+      }
     }
   }
 
@@ -159,6 +178,14 @@ export async function renderMap(
 
   const resvg = new Resvg(svg, { fitTo: { mode: 'original' } });
   return Buffer.from(resvg.render().asPng());
+}
+
+// North-pointing pentagon: first vertex at -90° (top), then every 72°
+function pentagonPoints(cx: number, cy: number, r: number): string {
+  return Array.from({ length: 5 }, (_, i) => {
+    const angle = (Math.PI / 180) * (-90 + i * 72);
+    return `${(cx + r * Math.cos(angle)).toFixed(1)},${(cy + r * Math.sin(angle)).toFixed(1)}`;
+  }).join(' ');
 }
 
 function neighborCoordForDirection(q: number, r: number, dir: string): { q: number; r: number } {
