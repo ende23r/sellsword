@@ -98,19 +98,6 @@ npm run seed     # load map data (run once, or after editing map-seed.json)
 npm run dev      # start the bot
 ```
 
-### TODO(eric): Google Sheets credentials
-
-The Sheets integration is implemented in `src/lib/sheets.ts` and is used by `/queue`, `/message`, `/commission`, and the daily update. To wire it up:
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com) and create a project.
-2. Enable the **Google Sheets API** and the **Google Drive API**.
-3. Go to **IAM & Admin → Service Accounts → Create Service Account**.
-4. After creating it, go to **Actions → Manage Keys → Add Key → JSON**. Download the file.
-5. Save the JSON key somewhere on disk (e.g. `~/.config/sellsword/service-account.json`) and set `GOOGLE_SERVICE_ACCOUNT_KEY` to that path.
-6. Create your admin Google Sheet (with tabs: `Queue`, `Messages`) and your army sheet template.
-7. **Share both sheets with the service account.** Open the JSON key file and copy the `client_email` value (looks like `name@project.iam.gserviceaccount.com`). Click **Share** on each sheet, paste that address, and grant **Editor** access. Without this step the bot will get 403 errors when trying to read or write the sheets.
-8. Set `ADMIN_SHEET_ID` and `ARMY_SHEET_TEMPLATE_ID` to the Sheet IDs from their URLs.
-9. In `src/lib/sheets.ts`, update `ARMY_SHEET_CELLS` to match the cell layout of your army sheet template.
 
 ## Pause mode
 
