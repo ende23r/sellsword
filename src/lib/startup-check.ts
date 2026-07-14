@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { google } from 'googleapis';
 import type { Client } from 'discord.js';
+import { checkQueueTab } from './sheet-checks.js';
 
 type CheckResult = { label: string; ok: boolean; detail?: string };
 
@@ -79,23 +80,24 @@ function checkServiceAccountKey(): {
 
 async function checkAdminSheet(
   auth: InstanceType<typeof google.auth.GoogleAuth>,
-): Promise<CheckResult> {
+): Promise<CheckResult[]> {
   const sheetId = process.env.ADMIN_SHEET_ID;
   if (!sheetId)
-    return { label: 'Admin sheet is accessible', ok: false, detail: 'ADMIN_SHEET_ID not set' };
+    return [{ label: 'Admin sheet is accessible', ok: false, detail: 'ADMIN_SHEET_ID not set' }];
   try {
     const sheets = google.sheets({ version: 'v4', auth });
     const res = await sheets.spreadsheets.get({
       spreadsheetId: sheetId,
       fields: 'spreadsheetId,properties.title',
     });
-    return { label: `Admin sheet "${res.data.properties?.title}" is accessible`, ok: true };
-  } catch (err) {
-    return {
-      label: 'Admin sheet is accessible',
-      ok: false,
-      detail: (err as Error).message,
+    const accessible: CheckResult = {
+      label: `Admin sheet "${res.data.properties?.title}" is accessible`,
+      ok: true,
     };
+    const tabChecks = await checkQueueTab(sheets, sheetId);
+    return [accessible, ...tabChecks];
+  } catch (err) {
+    return [{ label: 'Admin sheet is accessible', ok: false, detail: (err as Error).message }];
   }
 }
 
@@ -154,11 +156,11 @@ export async function runStartupChecks(): Promise<void> {
   });
 
   if (auth) {
-    const [adminSheet, template] = await Promise.all([
+    const [adminSheetResults, template] = await Promise.all([
       checkAdminSheet(auth),
       checkArmySheetTemplate(auth),
     ]);
-    results.push(adminSheet, template);
+    results.push(...adminSheetResults, template);
   } else {
     results.push(
       {
