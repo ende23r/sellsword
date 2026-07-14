@@ -3,23 +3,24 @@
 
 export type HexCoord = { q: number; r: number };
 
-// The six neighbor directions in axial coordinates (N, NE, SE, S, SW, NW)
+// The six neighbor directions in axial coordinates.
+// +q=E, -q=W, +r=SE, -r=NW; diagonals are NE and SW.
 export const HEX_DIRECTIONS: Record<string, HexCoord> = {
-  N: { q: 0, r: -1 },
+  NW: { q: 0, r: -1 },
   NE: { q: 1, r: -1 },
-  SE: { q: 1, r: 0 },
-  S: { q: 0, r: 1 },
+  E:  { q: 1, r: 0 },
+  SE: { q: 0, r: 1 },
   SW: { q: -1, r: 1 },
-  NW: { q: -1, r: 0 },
+  W:  { q: -1, r: 0 },
 };
 
 export const OPPOSITE_DIRECTION: Record<string, string> = {
-  N: 'S',
-  NE: 'SW',
-  SE: 'NW',
-  S: 'N',
-  SW: 'NE',
   NW: 'SE',
+  NE: 'SW',
+  E:  'W',
+  SE: 'NW',
+  SW: 'NE',
+  W:  'E',
 };
 
 export function hexDistance(a: HexCoord, b: HexCoord): number {

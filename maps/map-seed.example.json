@@ -11,9 +11,9 @@
       "terrain": "city",
       "_comment_terrain": "flatland | hills | forest | mountains | marsh | coast | sea",
       "settlement": 300,
-      "roads": ["NE", "S"],
-      "_comment_roads": "Directions with road connections: N | NE | SE | S | SW | NW",
-      "rivers": ["NW"],
+      "roads": ["NE", "SE"],
+      "_comment_roads": "Directions with road connections: NW | NE | E | SE | SW | W",
+      "rivers": ["W"],
       "_comment_rivers": "Same direction format as roads; indicates river on that hex edge",
       "stronghold": {
         "name": "Vortoszol",
@@ -38,7 +38,7 @@
       "r": 1,
       "terrain": "flatland",
       "settlement": 60,
-      "roads": ["N", "SE"],
+      "roads": ["NW", "E"],
       "rivers": [],
       "stronghold": {
         "name": "Mirsk",
@@ -54,7 +54,7 @@
       "terrain": "forest",
       "settlement": 20,
       "roads": [],
-      "rivers": ["NW"]
+      "rivers": ["W"]
     },
     {
       "q": 1,

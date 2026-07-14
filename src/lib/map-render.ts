@@ -16,12 +16,12 @@ const TERRAIN_COLOR: Record<string, string> = {
 
 // Corner index pairs for each edge direction (pointy-top hex, corners 0–5 at -30°,30°,90°,150°,210°,270°)
 const RIVER_EDGE_CORNERS: Record<string, [number, number]> = {
-  N:  [4, 5],
+  NW: [4, 5],
   NE: [5, 0],
-  SE: [0, 1],
-  S:  [1, 2],
+  E:  [0, 1],
+  SE: [1, 2],
   SW: [2, 3],
-  NW: [3, 4],
+  W:  [3, 4],
 };
 
 const STRONGHOLD_SYMBOL: Record<string, string> = {
@@ -190,12 +190,12 @@ function pentagonPoints(cx: number, cy: number, r: number): string {
 
 function neighborCoordForDirection(q: number, r: number, dir: string): { q: number; r: number } {
   const dirs: Record<string, { q: number; r: number }> = {
-    N: { q: 0, r: -1 },
+    NW: { q: 0, r: -1 },
     NE: { q: 1, r: -1 },
-    SE: { q: 1, r: 0 },
-    S: { q: 0, r: 1 },
+    E:  { q: 1, r: 0 },
+    SE: { q: 0, r: 1 },
     SW: { q: -1, r: 1 },
-    NW: { q: -1, r: 0 },
+    W:  { q: -1, r: 0 },
   };
   const d = dirs[dir] ?? { q: 0, r: 0 };
   return { q: q + d.q, r: r + d.r };
