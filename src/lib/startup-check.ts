@@ -126,19 +126,45 @@ async function checkArmySheetTemplate(
 
 // ── Discord checks (run after ClientReady) ────────────────────────────────
 
+export function checkQueueRole(guild: { roles: { cache: { find(fn: (r: { name: string }) => boolean): unknown } } }): CheckResult {
+  const found = guild.roles.cache.find((r) => r.name === 'Queued');
+  return {
+    label: 'Discord guild has a "Queued" role',
+    ok: !!found,
+    detail: found ? undefined : 'Create a role named "Queued" so /queue and /unqueue can assign it',
+  };
+}
+
 export async function checkAdminChannel(client: Client): Promise<void> {
+  const results: CheckResult[] = [];
+
   const channelId = process.env.ADMIN_CHANNEL_ID;
-  if (!channelId) return; // already caught by env check
-  try {
-    const channel = await client.channels.fetch(channelId);
-    if (!channel?.isTextBased()) {
-      console.warn(`⚠️  ADMIN_CHANNEL_ID ${channelId} exists but is not a text channel.`);
+  if (channelId) {
+    try {
+      const channel = await client.channels.fetch(channelId);
+      results.push({
+        label: 'Admin channel is accessible and is a text channel',
+        ok: !!channel?.isTextBased(),
+        detail: channel?.isTextBased() ? undefined : 'channel exists but is not a text channel',
+      });
+    } catch {
+      results.push({
+        label: 'Admin channel is accessible and is a text channel',
+        ok: false,
+        detail: `could not fetch channel ${channelId} — does the bot have access?`,
+      });
     }
-  } catch {
-    console.warn(
-      `⚠️  Could not fetch ADMIN_CHANNEL_ID ${channelId} — does the bot have access to that channel?`,
-    );
   }
+
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (guildId) {
+    const guild = client.guilds.cache.get(guildId);
+    if (guild) {
+      results.push(checkQueueRole(guild));
+    }
+  }
+
+  warn(results);
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────
