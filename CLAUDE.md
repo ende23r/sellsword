@@ -14,7 +14,10 @@ npm run dev          # run bot locally with watch mode (auto-restarts on file ch
 npm start            # run bot without watch mode
 npm start -- --paused  # start in pause mode (status queries only, no orders or daily updates)
 npm run deploy       # register slash commands with Discord (run once, or after adding/changing commands)
-npm run seed         # seed the SQLite database from map-seed.json
+npm run seed                           # seed from map-seed.json (upserts, keeps existing hexes)
+npm run seed -- maps/my-map.json      # seed from a specific file
+npm run seed -- --clear maps/foo.json # wipe map data then seed fresh
+npm run clear-map                      # wipe all hex and stronghold data, no reseed
 npm run typecheck    # type-check without emitting
 npm run format       # format all files with Prettier
 ```

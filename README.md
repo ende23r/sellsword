@@ -58,9 +58,21 @@ Add them in the OAuth2 → URL Generator step.
 Create the map data file and seed the database:
 
 ```
-cp map-seed.example.json map-seed.json
-# edit map-seed.json with your hex data
-npm run seed
+cp map-seed.example.json maps/my-map.json
+# edit maps/my-map.json with your hex data
+npm run seed -- maps/my-map.json
+```
+
+To reseed cleanly (wipes existing hex data first):
+
+```
+npm run seed -- --clear maps/my-map.json
+```
+
+To wipe map data without reseeding:
+
+```
+npm run clear-map
 ```
 
 ### Run the bot
