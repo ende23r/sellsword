@@ -9,6 +9,7 @@
     "render-map": "tsx src/render-map.ts",
     "seed": "tsx src/seed.ts",
     "clear-map": "tsx src/seed.ts --clear",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write ."
   },
@@ -26,6 +27,7 @@
     "@types/node": "^26.1.1",
     "prettier": "^3.9.5",
     "tsx": "^4.23.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }
