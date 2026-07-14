@@ -1,11 +1,24 @@
 import 'dotenv/config';
 import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import db from './lib/db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const seedPath = join(__dirname, '../map-seed.json');
+const args = process.argv.slice(2);
+const clearOnly = args.includes('--clear') && args.length === 1;
+const pathArg = args.find((a) => !a.startsWith('--'));
+const seedPath = pathArg ? resolve(pathArg) : join(__dirname, '../map-seed.json');
+
+// ── Clear ──────────────────────────────────────────────────────────────────
+
+if (args.includes('--clear')) {
+  db.exec('DELETE FROM strongholds; DELETE FROM hexes;');
+  console.log('Map data cleared.');
+  if (clearOnly) process.exit(0);
+}
+
+// ── Seed ───────────────────────────────────────────────────────────────────
 
 type StrongholdSeed = {
   name: string;
@@ -35,7 +48,7 @@ try {
   raw = readFileSync(seedPath, 'utf-8');
 } catch {
   console.error(
-    'map-seed.json not found. Copy map-seed.example.json to map-seed.json and fill in your map data.',
+    `Seed file not found: ${seedPath}\nCopy map-seed.example.json and fill in your map data.`,
   );
   process.exit(1);
 }
@@ -94,6 +107,4 @@ const runSeed = db.transaction(() => {
 });
 
 const { hexCount, strongholdCount } = runSeed();
-console.log(
-  `Seeded ${hexCount} hexes and ${strongholdCount} strongholds from "${seed.meta.name}".`,
-);
+console.log(`Seeded ${hexCount} hexes and ${strongholdCount} strongholds from "${seed.meta.name}".`);
