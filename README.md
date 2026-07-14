@@ -122,13 +122,24 @@ In pause mode the bot responds to status queries but refuses orders, messages, a
 
 ## Daily update
 
-Runs three times per day at **6 AM, 2 PM, and 10 PM** in the configured timezone. Each run:
+Runs three times per day at **6 AM (morning), 2 PM (midday), and 10 PM (night)** in the configured timezone.
 
-1. Collect forage for armies that queued a forage order (takes the full day; collected at next morning update)
-2. Apply movement orders; notify players if armies cross paths or block each other
-3. Consume supplies (once per day, at the morning update)
-4. Consume coin for mercenary wages
-5. Push updated army stats to each commander's army sheet and the admin sheet
+### Morning (6 AM)
+- Deduct daily supply consumption from each army (infantry/noncombatants: 1/day; cavalry/wagons: 10/day)
+- Deduct coin for mercenary wages
+- Push updated army stats to each commander's army sheet and the admin sheet
+
+### Midday (2 PM)
+- Push updated army stats to each commander's army sheet and the admin sheet
+
+### Night (10 PM)
+- Apply movement orders — movement represents a full day of marching (morning through night)
+- Notify players if armies share a hex or block each other
+- Collect forage for armies that submitted a forage order *and* spent the full day foraging (i.e., no conflicting movement order)
+- Push updated army stats to each commander's army sheet and the admin sheet
+
+### Night march
+If an army has night march enabled, an additional movement step runs overnight (after the night tick, before morning). Night march comes at a cost: armies must pass a daily morale check or suffer consequences.
 
 ## Open questions
 
