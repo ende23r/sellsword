@@ -2,8 +2,7 @@ import { Resvg } from '@resvg/resvg-js';
 import type { ArmyRow, HexRow, StrongholdRow } from './db.js';
 import { hexCorners, hexToPixel } from './hex.js';
 
-const HEX_SIZE = 64; // circumradius in pixels
-const PADDING = HEX_SIZE * 2;
+const HEX_SIZE = 64; // circumradius in pixels (default; override via renderMap options)
 
 const TERRAIN_COLOR: Record<string, string> = {
   flatland: '#d4c49a',
@@ -24,6 +23,7 @@ const STRONGHOLD_SYMBOL: Record<string, string> = {
 type RenderOptions = {
   visibleCoords?: Set<string>; // 'q,r' strings; undefined = show all (admin view)
   armyPositions?: ArmyRow[];
+  hexSize?: number; // override default size
 };
 
 export async function renderMap(
@@ -33,14 +33,17 @@ export async function renderMap(
 ): Promise<Buffer> {
   if (hexes.length === 0) throw new Error('No hex data to render.');
 
+  const size = options.hexSize ?? HEX_SIZE;
+  const padding = size * 2;
+
   const strongholdByHexId = new Map<number, StrongholdRow>(strongholds.map((s) => [s.hex_id, s]));
 
   // Calculate bounding box
-  const pixelCoords = hexes.map((h) => hexToPixel(h, HEX_SIZE));
-  const minX = Math.min(...pixelCoords.map(([x]) => x)) - PADDING;
-  const minY = Math.min(...pixelCoords.map(([, y]) => y)) - PADDING;
-  const maxX = Math.max(...pixelCoords.map(([x]) => x)) + PADDING;
-  const maxY = Math.max(...pixelCoords.map(([, y]) => y)) + PADDING;
+  const pixelCoords = hexes.map((h) => hexToPixel(h, size));
+  const minX = Math.min(...pixelCoords.map(([x]) => x)) - padding;
+  const minY = Math.min(...pixelCoords.map(([, y]) => y)) - padding;
+  const maxX = Math.max(...pixelCoords.map(([x]) => x)) + padding;
+  const maxY = Math.max(...pixelCoords.map(([, y]) => y)) + padding;
   const width = Math.ceil(maxX - minX);
   const height = Math.ceil(maxY - minY);
 
@@ -52,8 +55,8 @@ export async function renderMap(
   for (const hex of hexes) {
     const coordKey = `${hex.q},${hex.r}`;
     const visible = !options.visibleCoords || options.visibleCoords.has(coordKey);
-    const [cx, cy] = hexToPixel(hex, HEX_SIZE, -minX, -minY);
-    const corners = hexCorners(cx, cy, HEX_SIZE);
+    const [cx, cy] = hexToPixel(hex, size, -minX, -minY);
+    const corners = hexCorners(cx, cy, size);
     const points = corners.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
 
     const fill = visible ? (TERRAIN_COLOR[hex.terrain] ?? '#cccccc') : '#222222';
@@ -69,7 +72,7 @@ export async function renderMap(
       const neighbor = neighborCoordForDirection(hex.q, hex.r, dir);
       const neighborHex = hexes.find((h) => h.q === neighbor.q && h.r === neighbor.r);
       if (neighborHex) {
-        const [nx, ny] = hexToPixel(neighborHex, HEX_SIZE, -minX, -minY);
+        const [nx, ny] = hexToPixel(neighborHex, size, -minX, -minY);
         // Draw only half the line (to the midpoint) to avoid double-drawing
         const mx = (cx + nx) / 2;
         const my = (cy + ny) / 2;
@@ -85,7 +88,7 @@ export async function renderMap(
       const neighbor = neighborCoordForDirection(hex.q, hex.r, dir);
       const neighborHex = hexes.find((h) => h.q === neighbor.q && h.r === neighbor.r);
       if (neighborHex) {
-        const [nx, ny] = hexToPixel(neighborHex, HEX_SIZE, -minX, -minY);
+        const [nx, ny] = hexToPixel(neighborHex, size, -minX, -minY);
         const mx = (cx + nx) / 2;
         const my = (cy + ny) / 2;
         riverLines.push(
@@ -97,13 +100,13 @@ export async function renderMap(
     // Settlement score label
     if (hex.settlement > 0) {
       labels.push(
-        `<text x="${cx.toFixed(1)}" y="${(cy + HEX_SIZE * 0.35).toFixed(1)}" text-anchor="middle" font-size="8" fill="#333" font-family="sans-serif">${hex.settlement}</text>`,
+        `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.35).toFixed(1)}" text-anchor="middle" font-size="8" fill="#333" font-family="sans-serif">${hex.settlement}</text>`,
       );
     }
 
     // Coordinates (small, top of hex)
     labels.push(
-      `<text x="${cx.toFixed(1)}" y="${(cy - HEX_SIZE * 0.55).toFixed(1)}" text-anchor="middle" font-size="7" fill="#666" font-family="monospace">${hex.q},${hex.r}</text>`,
+      `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.55).toFixed(1)}" text-anchor="middle" font-size="7" fill="#666" font-family="monospace">${hex.q},${hex.r}</text>`,
     );
 
     // Stronghold
@@ -111,8 +114,8 @@ export async function renderMap(
     if (stronghold) {
       const symbol = STRONGHOLD_SYMBOL[stronghold.type] ?? '?';
       labels.push(
-        `<text x="${cx.toFixed(1)}" y="${(cy - HEX_SIZE * 0.15).toFixed(1)}" text-anchor="middle" font-size="10" fill="#111" font-family="sans-serif">${symbol}</text>`,
-        `<text x="${cx.toFixed(1)}" y="${(cy + HEX_SIZE * 0.65).toFixed(1)}" text-anchor="middle" font-size="7" fill="#111" font-weight="bold" font-family="sans-serif">${stronghold.name}</text>`,
+        `<text x="${cx.toFixed(1)}" y="${(cy - size * 0.15).toFixed(1)}" text-anchor="middle" font-size="10" fill="#111" font-family="sans-serif">${symbol}</text>`,
+        `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.65).toFixed(1)}" text-anchor="middle" font-size="7" fill="#111" font-weight="bold" font-family="sans-serif">${stronghold.name}</text>`,
       );
     }
   }
@@ -122,7 +125,7 @@ export async function renderMap(
     for (const army of options.armyPositions) {
       const coordKey = `${army.hex_q},${army.hex_r}`;
       if (options.visibleCoords && !options.visibleCoords.has(coordKey)) continue;
-      const [cx, cy] = hexToPixel({ q: army.hex_q, r: army.hex_r }, HEX_SIZE, -minX, -minY);
+      const [cx, cy] = hexToPixel({ q: army.hex_q, r: army.hex_r }, size, -minX, -minY);
       labels.push(
         `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="#e63" stroke="#fff" stroke-width="1"/>`,
       );

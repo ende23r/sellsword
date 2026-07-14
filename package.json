@@ -6,6 +6,7 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "deploy": "tsx src/deploy.ts",
+    "render-map": "tsx src/render-map.ts",
     "seed": "tsx src/seed.ts",
     "clear-map": "tsx src/seed.ts --clear",
     "typecheck": "tsc --noEmit",
