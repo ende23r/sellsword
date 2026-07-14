@@ -1,6 +1,7 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
 import { removeFromQueue } from '../lib/queue-ops.js';
+import { removeFromQueueSheet } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const QUEUE_ROLE_NAME = 'Queued';
@@ -27,8 +28,8 @@ const unqueue: Command = {
 
     const user = targetUser ?? interaction.user;
 
-    const removed = removeFromQueue(db, user.id);
-    if (!removed) {
+    const entry = removeFromQueue(db, user.id);
+    if (!entry) {
       await interaction.reply({
         content: `${user.id === interaction.user.id ? 'You are' : `${user.displayName} is`} not in the queue.`,
         ephemeral: true,
@@ -41,6 +42,13 @@ const unqueue: Command = {
     const member = await guild.members.fetch(user.id);
     const role = guild.roles.cache.find((r) => r.name === QUEUE_ROLE_NAME);
     if (role) await member.roles.remove(role);
+
+    // Remove the row from the admin sheet (non-fatal)
+    try {
+      await removeFromQueueSheet(entry.discord_username);
+    } catch (err) {
+      console.error('Failed to remove queue row from Google Sheets:', err);
+    }
 
     await interaction.reply(
       targetUser

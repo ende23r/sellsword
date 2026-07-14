@@ -55,6 +55,47 @@ export async function appendToQueue(
   await appendToAdminSheet('Queue', [timestamp, discordUsername, addedBy]);
 }
 
+export async function removeFromQueueSheet(discordUsername: string): Promise<void> {
+  const sheetId = process.env.ADMIN_SHEET_ID;
+  if (!sheetId) return;
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  // Find the row containing this username in column B (0-based index)
+  const valuesRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: 'Queue!B:B',
+  });
+  const rows = valuesRes.data.values ?? [];
+  const rowIndex = rows.findIndex((row) => row[0] === discordUsername);
+  if (rowIndex === -1) return;
+
+  // Resolve the numeric sheet ID for the Queue tab
+  const metaRes = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: 'sheets.properties',
+  });
+  const queueSheet = metaRes.data.sheets?.find((s) => s.properties?.title === 'Queue');
+  if (queueSheet?.properties?.sheetId == null) return;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: queueSheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
 // ── Message log tab ────────────────────────────────────────────────────────
 
 export async function logMessage(

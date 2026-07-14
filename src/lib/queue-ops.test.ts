@@ -29,14 +29,16 @@ describe('removeFromQueue', () => {
     db = makeDb();
   });
 
-  it('removes the user and returns true when they are queued', () => {
+  it('removes the user and returns the stored entry', () => {
     seedUser(db);
-    expect(removeFromQueue(db, 'user-1')).toBe(true);
+    const result = removeFromQueue(db, 'user-1');
+    expect(result).not.toBeNull();
+    expect(result?.discord_username).toBe('alice');
     expect(db.prepare('SELECT * FROM queue WHERE discord_user_id = ?').get('user-1')).toBeUndefined();
   });
 
-  it('returns false when the user is not in the queue', () => {
-    expect(removeFromQueue(db, 'not-queued')).toBe(false);
+  it('returns null when the user is not in the queue', () => {
+    expect(removeFromQueue(db, 'not-queued')).toBeNull();
   });
 
   it('does not affect other users in the queue', () => {
