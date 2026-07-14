@@ -18,6 +18,7 @@ npm run seed                           # seed from map-seed.json (upserts, keeps
 npm run seed -- maps/my-map.json      # seed from a specific file
 npm run seed -- --clear maps/foo.json # wipe map data then seed fresh
 npm run clear-map                      # wipe all hex and stronghold data, no reseed
+npm test             # run all tests (vitest)
 npm run typecheck    # type-check without emitting
 npm run format       # format all files with Prettier
 ```
@@ -42,10 +43,17 @@ This repo uses **Jujutsu (`jj`)** instead of git. Use `jj` commands for version 
 
 Key libraries:
 
-- `better-sqlite3` — synchronous SQLite; schema is initialized on first import of `src/lib/db.ts`
+- `better-sqlite3` — synchronous SQLite; schema defined in `src/lib/schema.ts`, applied on first import of `src/lib/db.ts`
 - `googleapis` — Google Sheets and Drive; credentials configured via `GOOGLE_SERVICE_ACCOUNT_KEY`
 - `@resvg/resvg-js` — SVG→PNG rendering (WASM-based, no system lib deps); used by `/map`
 - `node-cron` — daily update scheduler (6 AM / 2 PM / 10 PM in `SCHEDULE_TIMEZONE`)
+
+Key lib files:
+
+- `src/lib/tick-processors.ts` — all game-loop functions (consumeSupplies, processMovement, processForage, deliverMessages, etc.); each takes `db: Database.Database` as first param so tests can pass an in-memory DB. This is where game mechanics live.
+- `src/lib/schema.ts` — DB schema SQL; imported by db.ts and by tests (`new Database(':memory:'); db.exec(DB_SCHEMA)`)
+- `src/lib/daily-update.ts` — thin orchestrator that calls tick-processors functions with the live singleton DB
+- `src/lib/admin-notify.ts` — shared helper for posting a message to the admin channel
 
 Map data lives in `map-seed.json` (copy from `map-seed.example.json`). The seed script (`npm run seed`) is idempotent — re-running it updates existing hexes in place.
 

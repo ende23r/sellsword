@@ -115,7 +115,7 @@ In pause mode the bot responds to status queries but refuses orders, messages, a
 - **Recruit** — take the top player from the queue and add them to a faction and channel. Notifies admin.
 - **Commission** — create a Discord channel and copy the army sheet template for a new commander. Notifies admin.
 - **Message** — send an in-game message to another hex. Logs to the admin sheet and calculates delivery time based on distance and terrain. Notifies admin.
-- **Forage** — queue the army to collect supplies from current and adjacent hexes at the next daily update. Notifies admin if revolt risk.
+- **Forage** — queue the army to collect supplies from the current hex and all adjacent hexes at the next night update. Cavalry extends the range to 2 hexes. Cancels any pending move order. Notifies admin if revolt risk.
 - **Move** — queue a movement order for the next daily update. Takes a road/off-road parameter.
 - **Pace** — set forced march and/or night march flags on the army.
 - **Stance** — set the army to block or allow passage by other armies.
@@ -125,22 +125,22 @@ In pause mode the bot responds to status queries but refuses orders, messages, a
 
 Runs three times per day at **6 AM (morning), 2 PM (midday), and 10 PM (night)** in the configured timezone.
 
+All three ticks deliver any in-game messages whose delivery time has passed, then push updated army stats to Google Sheets.
+
 ### Morning (6 AM)
-- Deduct daily supply consumption from each army (infantry/noncombatants: 1/day; cavalry/wagons: 10/day)
-- Deduct coin for mercenary wages
-- Push updated army stats to each commander's army sheet and the admin sheet
+- Apply any night march movement from the previous night (armies with night march enabled)
+- Deduct daily supply consumption from each army (infantry/noncombatants: 1/day; cavalry/wagons: 10/day); armies that can't pay lose 1 morale
 
 ### Midday (2 PM)
-- Push updated army stats to each commander's army sheet and the admin sheet
+- (stats sync and message delivery only)
 
 ### Night (10 PM)
-- Apply movement orders — movement represents a full day of marching (morning through night)
-- Notify players if armies share a hex or block each other
-- Collect forage for armies that submitted a forage order *and* spent the full day foraging (i.e., no conflicting movement order)
-- Push updated army stats to each commander's army sheet and the admin sheet
+- Apply movement orders — movement represents a full day of marching (morning through night); armies advance toward their destination each tick at road speed (2 hexes/day) or off-road speed (1 hex/day)
+- Notify if armies share a hex or block each other
+- Collect forage for armies that submitted a forage order and **did not** also have a move order (submitting either order cancels the other — players have one live order at a time)
 
 ### Night march
-If an army has night march enabled, an additional movement step runs overnight (after the night tick, before morning). Night march comes at a cost: armies must pass a daily morale check or suffer consequences.
+If an army has night march enabled, it marches an additional hex overnight (2 if forced march), road only. The army makes a morale check; rolling doubles on 2d6 costs 1 morale.
 
 ## Open questions
 
