@@ -4,7 +4,21 @@ A Discord bot for running Cataphracts.
 
 ## Architecture
 
-Game state (armies, commanders, hex map, orders, forage counts) lives in a local **SQLite** database. The bot is the only writer; nothing else touches it directly.
+### Design principle
+
+The bot follows a strict separation between **player interaction** and **game state changes**:
+
+- **Queries** (read-only): players can ask about their army, the map, pending orders, etc. at any time. These never mutate state.
+- **Order submission**: players submit orders at any time. Orders are stored as pending records in SQLite and immediately confirmed to the player. Submitting a new order of the same type replaces the previous one.
+- **Tick processing**: three times per day, the bot reads all pending orders and current game state, applies game mechanics deterministically, writes the results back to SQLite, and posts a summary to the admin channel.
+
+Between ticks, game state is frozen. The outcome of any tick is fully determined by: current army state, current pending orders, army settings (pace, stance), and the map. There are no hidden rolls until the tick fires.
+
+Army **settings** (pace, stance) are a special case: they are army properties that players update directly, not queued orders. They take effect during the next tick that reads them.
+
+### Storage
+
+All game state lives in a local **SQLite** database. The bot is the only writer; nothing else touches it directly.
 
 **Google Sheets** handles the human-readable layer:
 
