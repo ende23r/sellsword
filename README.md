@@ -82,7 +82,7 @@ The Sheets integration is implemented in `src/lib/sheets.ts` and is used by `/qu
 4. After creating it, go to **Actions → Manage Keys → Add Key → JSON**. Download the file.
 5. Save the JSON key somewhere on disk (e.g. `~/.config/sellsword/service-account.json`) and set `GOOGLE_SERVICE_ACCOUNT_KEY` to that path.
 6. Create your admin Google Sheet (with tabs: `Queue`, `Messages`) and your army sheet template.
-7. Share both sheets with the service account's `client_email` (found in the JSON key file) — grant **Editor** access.
+7. **Share both sheets with the service account.** Open the JSON key file and copy the `client_email` value (looks like `name@project.iam.gserviceaccount.com`). Click **Share** on each sheet, paste that address, and grant **Editor** access. Without this step the bot will get 403 errors when trying to read or write the sheets.
 8. Set `ADMIN_SHEET_ID` and `ARMY_SHEET_TEMPLATE_ID` to the Sheet IDs from their URLs.
 9. In `src/lib/sheets.ts`, update `ARMY_SHEET_CELLS` to match the cell layout of your army sheet template.
 
