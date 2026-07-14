@@ -1,6 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId, getHex } from '../lib/db.js';
-import { hexDistance } from '../lib/hex.js';
 import type { Command } from '../types.js';
 
 const move: Command = {
@@ -40,15 +39,6 @@ const move: Command = {
       return;
     }
 
-    const dist = hexDistance({ q: army.hex_q, r: army.hex_r }, { q: destQ, r: destR });
-    if (dist !== 1) {
-      await interaction.reply({
-        content: `You can only move to an adjacent hex (distance 1). Hex (${destQ},${destR}) is distance ${dist} away.`,
-        ephemeral: true,
-      });
-      return;
-    }
-
     if (!roadsOnly && army.wagons > 0) {
       await interaction.reply({
         content:
@@ -68,8 +58,14 @@ const move: Command = {
       JSON.stringify({ dest_q: destQ, dest_r: destR, roads_only: roadsOnly }),
     );
 
+    const dist = Math.round(
+      (Math.abs(army.hex_q - destQ) +
+        Math.abs(army.hex_q + army.hex_r - destQ - destR) +
+        Math.abs(army.hex_r - destR)) /
+        2,
+    );
     await interaction.reply(
-      `✅ Move order queued: **(${army.hex_q},${army.hex_r}) → (${destQ},${destR})** — will be processed at the next update.\nTerrain: **${destHex.terrain}**${roadsOnly ? ' · roads only' : ''}`,
+      `✅ Move order queued: **(${army.hex_q},${army.hex_r}) → (${destQ},${destR})** (${dist} hex${dist !== 1 ? 'es' : ''} away) — army will advance each night tick until it arrives.\nTerrain: **${destHex.terrain}**${roadsOnly ? ' · roads only' : ''}`,
     );
   },
 };

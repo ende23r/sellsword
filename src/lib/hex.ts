@@ -56,6 +56,41 @@ export function hexCorners(cx: number, cy: number, size: number): [number, numbe
   });
 }
 
+// BFS shortest path between two hexes. Returns ordered steps excluding `from`, including `to`.
+// Returns empty array if no path exists or if from === to.
+export function findPath(from: HexCoord, to: HexCoord, validCoords: Set<string>): HexCoord[] {
+  const key = (h: HexCoord) => `${h.q},${h.r}`;
+  if (from.q === to.q && from.r === to.r) return [];
+
+  const queue: HexCoord[] = [from];
+  const prev = new Map<string, string | null>();
+  prev.set(key(from), null);
+
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (cur.q === to.q && cur.r === to.r) break;
+    for (const d of Object.values(HEX_DIRECTIONS)) {
+      const next = { q: cur.q + d.q, r: cur.r + d.r };
+      const nk = key(next);
+      if (!validCoords.has(nk) || prev.has(nk)) continue;
+      prev.set(nk, key(cur));
+      queue.push(next);
+    }
+  }
+
+  if (!prev.has(key(to))) return [];
+
+  const path: HexCoord[] = [];
+  let cur: string | null | undefined = key(to);
+  const fromKey = key(from);
+  while (cur && cur !== fromKey) {
+    const [q, r] = cur.split(',').map(Number);
+    path.unshift({ q, r });
+    cur = prev.get(cur);
+  }
+  return path;
+}
+
 // Miles traveled per day given terrain, road usage, and march pace.
 export function milesPerDay(onRoad: boolean, forcedMarch: boolean, nightMarch: boolean): number {
   const base = onRoad ? 12 : 6;
