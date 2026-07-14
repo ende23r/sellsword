@@ -9,3 +9,6 @@ node_modules/
 
 # Google service account key
 *.json
+
+# Locally rendered map
+*.png
