@@ -58,7 +58,9 @@ export async function renderMap(
   const height = Math.ceil(maxY - minY);
 
   const hexPolygons: string[] = [];
+  const roadBorders: string[] = [];
   const roadLines: string[] = [];
+  const riverBorders: string[] = [];
   const riverLines: string[] = [];
   const labels: string[] = [];
 
@@ -86,6 +88,9 @@ export async function renderMap(
         // Draw only half the line (to the midpoint) to avoid double-drawing
         const mx = (cx + nx) / 2;
         const my = (cy + ny) / 2;
+        roadBorders.push(
+          `<line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${mx.toFixed(1)}" y2="${my.toFixed(1)}" stroke="#000" stroke-width="4" stroke-linecap="round"/>`,
+        );
         roadLines.push(
           `<line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${mx.toFixed(1)}" y2="${my.toFixed(1)}" stroke="#8b6914" stroke-width="2" stroke-linecap="round"/>`,
         );
@@ -98,6 +103,9 @@ export async function renderMap(
       const edgeCorners = RIVER_EDGE_CORNERS[dir];
       if (!edgeCorners) continue;
       const [a, b] = [corners[edgeCorners[0]], corners[edgeCorners[1]]];
+      riverBorders.push(
+        `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="#000" stroke-width="5" stroke-linecap="round"/>`,
+      );
       riverLines.push(
         `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="#3a7abf" stroke-width="2.5" stroke-linecap="round" opacity="0.8"/>`,
       );
@@ -142,7 +150,9 @@ export async function renderMap(
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="${width}" height="${height}" fill="#1a1a2e"/>
   ${hexPolygons.join('\n  ')}
+  ${roadBorders.join('\n  ')}
   ${roadLines.join('\n  ')}
+  ${riverBorders.join('\n  ')}
   ${riverLines.join('\n  ')}
   ${labels.join('\n  ')}
 </svg>`;
