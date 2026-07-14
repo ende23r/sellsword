@@ -2,7 +2,7 @@ import { Resvg } from '@resvg/resvg-js';
 import type { ArmyRow, HexRow, StrongholdRow } from './db.js';
 import { hexCorners, hexToPixel } from './hex.js';
 
-const HEX_SIZE = 32; // circumradius in pixels
+const HEX_SIZE = 64; // circumradius in pixels
 const PADDING = HEX_SIZE * 2;
 
 const TERRAIN_COLOR: Record<string, string> = {
