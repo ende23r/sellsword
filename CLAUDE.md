@@ -28,6 +28,10 @@ Requires a `.env` file — copy `.env.example` and fill in the three values.
 
 There are two equally valid outcomes in this project: committing working code, and writing up a clear report when progress is blocked. If something can't move forward — missing credentials, an unresolved design question, an unexpected circumstance — the right move is to document what happened and what's needed, not to push through with assumptions. Surfacing unknowns early is as valuable as shipping code.
 
+Use **red-green-refactor TDD** for all new logic: write a failing test first, make it pass with minimal code, then clean up. Do not write implementation code that isn't covered by a test you wrote first.
+
+When a task is complete, **commit the work using Jujutsu** (`jj describe -m "..."` then `jj new`). Do not leave work uncommitted.
+
 ## Version Control
 
 This repo uses **Jujutsu (`jj`)** instead of git. Use `jj` commands for version control operations rather than `git`.
