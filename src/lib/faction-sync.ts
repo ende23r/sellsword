@@ -1,5 +1,5 @@
 import { ChannelType } from 'discord.js';
-import type { Guild } from 'discord.js';
+import type { ColorResolvable, Guild } from 'discord.js';
 import type Database from 'better-sqlite3';
 import { upsertFaction } from './faction-ops.js';
 
@@ -19,7 +19,7 @@ export async function syncFactions(
     const existingRole = guild.roles.cache.find((r) => r.name === entry.name);
     const role = existingRole ?? (await guild.roles.create({
       name: entry.name,
-      ...(entry.color ? { color: entry.color as `#${string}` } : {}),
+      ...(entry.color ? { colors: { primaryColor: entry.color as ColorResolvable } } : {}),
     }));
     log.push(existingRole ? `Found role: ${entry.name}` : `Created role: ${entry.name}`);
 

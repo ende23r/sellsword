@@ -50,7 +50,7 @@ describe('syncFactions', () => {
   it('creates a Discord role when none exists', async () => {
     await syncFactions(makeGuild() as any, db, seed);
     expect(createRole).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Red', color: '#FF0000' }),
+      expect.objectContaining({ name: 'Red', colors: { primaryColor: '#FF0000' } }),
     );
   });
 

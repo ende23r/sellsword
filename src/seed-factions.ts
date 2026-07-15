@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, Events, GatewayIntentBits } from 'discord.js';
 import db from './lib/db.js';
 import { syncFactions, type FactionSeedEntry } from './lib/faction-sync.js';
 
@@ -27,7 +27,7 @@ if (factions.length === 0) {
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-client.once('ready', async (c) => {
+client.once(Events.ClientReady, async (c) => {
   const guild = c.guilds.cache.get(process.env.DISCORD_GUILD_ID ?? '');
   if (!guild) {
     console.error('Guild not found. Check DISCORD_GUILD_ID in .env.');
