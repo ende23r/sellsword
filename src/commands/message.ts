@@ -59,6 +59,7 @@ const message: Command = {
     ).run(senderCommander.id, recipientCommander.id, content, deliverAt);
 
     const timestamp = new Date().toISOString();
+    let sheetOk = true;
     try {
       await logMessage(
         interaction.user.username,
@@ -68,12 +69,13 @@ const message: Command = {
         timestamp,
       );
     } catch (err) {
+      sheetOk = false;
       console.error('Failed to log message to Google Sheets:', err);
     }
 
     await notifyAdmin(
       interaction.client,
-      `📨 **${interaction.user.username}** → **${recipientUser.username}** | Distance: ${dist} hexes (${dist * 6} miles) | Delivers: <t:${Math.floor(new Date(deliverAt).getTime() / 1000)}:R>\n> ${content}`,
+      `📨 **${interaction.user.username}** → **${recipientUser.username}** | Distance: ${dist} hexes (${dist * 6} miles) | Delivers: <t:${Math.floor(new Date(deliverAt).getTime() / 1000)}:R>\n> ${content}${sheetOk ? '' : '\n⚠️ Sheet logging failed — log this message manually.'}`,
     );
 
     await interaction.reply({

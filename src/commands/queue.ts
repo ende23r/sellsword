@@ -1,5 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
+import { notifyAdmin } from '../lib/admin-notify.js';
 import { appendToQueue } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
@@ -52,6 +53,10 @@ const queue: Command = {
       await appendToQueue(user.username, interaction.user.username, timestamp);
     } catch (err) {
       console.error('Failed to log queue entry to Google Sheets:', err);
+      await notifyAdmin(
+        interaction.client,
+        `⚠️ Queue sheet sync failed — add **${user.username}** manually.`,
+      );
     }
 
     await interaction.reply(

@@ -1,5 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
+import { notifyAdmin } from '../lib/admin-notify.js';
 import { removeFromQueue } from '../lib/queue-ops.js';
 import { removeFromQueueSheet } from '../lib/sheets.js';
 import type { Command } from '../types.js';
@@ -48,6 +49,10 @@ const unqueue: Command = {
       await removeFromQueueSheet(entry.discord_username);
     } catch (err) {
       console.error('Failed to remove queue row from Google Sheets:', err);
+      await notifyAdmin(
+        interaction.client,
+        `⚠️ Queue sheet sync failed — remove **${entry.discord_username}** manually.`,
+      );
     }
 
     await interaction.reply(
