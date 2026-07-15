@@ -15,7 +15,7 @@ if (PAUSED) console.log('⏸  Bot started in PAUSE MODE — orders and updates a
 await runStartupChecks();
 
 const commands = new Collection<string, Command>();
-for (const file of readdirSync(join(__dirname, 'commands')).filter((f) => f.endsWith('.ts'))) {
+for (const file of readdirSync(join(__dirname, 'commands')).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))) {
   const mod = await import(pathToFileURL(join(__dirname, 'commands', file)).href);
   const command: Command = mod.default;
   commands.set(command.data.name, command);
