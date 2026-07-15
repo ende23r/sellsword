@@ -11,9 +11,8 @@ db.pragma('foreign_keys = ON');
 db.exec(DB_SCHEMA);
 
 // Migration: make factions.discord_category_id nullable if it was created NOT NULL.
-const factionsCategoryCol = db
-  .prepare("SELECT notnull FROM pragma_table_info('factions') WHERE name = 'discord_category_id'")
-  .get() as { notnull: number } | undefined;
+const factionsCols = db.pragma('table_info(factions)') as { name: string; notnull: number }[];
+const factionsCategoryCol = factionsCols.find((c) => c.name === 'discord_category_id');
 if (factionsCategoryCol?.notnull === 1) {
   db.exec(`
     CREATE TABLE factions_new (
