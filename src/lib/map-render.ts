@@ -190,10 +190,10 @@ export async function renderMap(
       const [cx, cy] = hexToPixel({ q: army.hex_q, r: army.hex_r }, size, -minX, -minY);
       const fill = army.faction_color ?? '#e63';
       const initials = armyInitials(army.name);
-      const r = 10;
+      const r = 15;
       labels.push(
         `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r}" fill="${fill}" stroke="#fff" stroke-width="1.5"/>`,
-        `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="9" font-weight="bold" fill="#fff" font-family="monospace">${initials}</text>`,
+        `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" fill="#fff" font-family="monospace">${initials}</text>`,
       );
     }
   }
