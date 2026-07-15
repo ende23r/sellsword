@@ -7,8 +7,11 @@ node_modules/
 *.db-shm
 *.db-wal
 
+# Claude
+/.claude/
+
 # Google service account key
-*.json
+/*.json
 
 # Locally rendered map
 *.png

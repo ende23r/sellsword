@@ -1,0 +1,11 @@
+[
+  {
+    "name": "Green Team",
+    "color": "#2ECC71",
+    "doc_url": "https://docs.google.com/document/d/YOUR_DOC_ID"
+  },
+  {
+    "name": "Orange Team",
+    "color": "#A84300"
+  }
+]
