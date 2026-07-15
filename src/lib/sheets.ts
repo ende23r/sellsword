@@ -165,9 +165,13 @@ export async function copyArmySheetTemplate(commanderName: string): Promise<{
   const auth = getAuth();
   const drive = google.drive({ version: 'v3', auth });
 
+  const folderId = process.env.ARMY_SHEETS_FOLDER_ID;
   const copy = await drive.files.copy({
     fileId: templateId,
-    requestBody: { name: `Army Sheet — ${commanderName}` },
+    requestBody: {
+      name: `Army Sheet — ${commanderName}`,
+      ...(folderId ? { parents: [folderId] } : {}),
+    },
   });
   const sheetId = copy.data.id!;
 

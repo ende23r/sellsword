@@ -124,6 +124,34 @@ async function checkArmySheetTemplate(
   }
 }
 
+async function checkArmySheetsFolder(
+  auth: InstanceType<typeof google.auth.GoogleAuth>,
+): Promise<CheckResult> {
+  const folderId = process.env.ARMY_SHEETS_FOLDER_ID;
+  if (!folderId)
+    return {
+      label: 'ARMY_SHEETS_FOLDER_ID is set',
+      ok: false,
+      detail: 'set this to a Drive folder owned by your Google account to avoid service account storage quota errors',
+    };
+  try {
+    const drive = google.drive({ version: 'v3', auth });
+    const res = await drive.files.get({ fileId: folderId, fields: 'id,name,capabilities' });
+    const canEdit = (res.data.capabilities as any)?.canEdit ?? false;
+    return {
+      label: `Army sheets folder "${res.data.name}" is accessible`,
+      ok: canEdit,
+      detail: canEdit ? undefined : 'service account cannot write to this folder — share it with Editor access',
+    };
+  } catch (err) {
+    return {
+      label: 'Army sheets folder is accessible',
+      ok: false,
+      detail: (err as Error).message,
+    };
+  }
+}
+
 // ── Discord checks (run after ClientReady) ────────────────────────────────
 
 export function checkQueueRole(guild: { roles: { cache: { find(fn: (r: { name: string }) => boolean): unknown } } }): CheckResult {
@@ -182,11 +210,12 @@ export async function runStartupChecks(): Promise<void> {
   });
 
   if (auth) {
-    const [adminSheetResults, template] = await Promise.all([
+    const [adminSheetResults, template, folder] = await Promise.all([
       checkAdminSheet(auth),
       checkArmySheetTemplate(auth),
+      checkArmySheetsFolder(auth),
     ]);
-    results.push(...adminSheetResults, template);
+    results.push(...adminSheetResults, template, folder);
   } else {
     results.push(
       {
