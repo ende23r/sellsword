@@ -10,6 +10,7 @@
     "seed": "tsx src/seed.ts",
     "clear-map": "tsx src/seed.ts --clear",
     "seed-factions": "tsx src/seed-factions.ts",
+    "clear-service-account-drive": "tsx src/clear-service-account-drive.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write ."
