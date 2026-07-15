@@ -43,23 +43,23 @@ function makeInteraction({ hasArchivedCategory = false } = {}) {
   };
 }
 
-describe('/disperse', () => {
+describe('/drop-army', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('deletes pending orders and the army from the DB', async () => {
-    const { default: command } = await import('./disperse.js');
+    const { default: command } = await import('./drop-army.js');
     await command.execute(makeInteraction() as any);
     expect(mockRun).toHaveBeenCalledTimes(2);
   });
 
   it('moves the army channel to the Archived category', async () => {
-    const { default: command } = await import('./disperse.js');
+    const { default: command } = await import('./drop-army.js');
     await command.execute(makeInteraction() as any);
     expect(mockSetParent).toHaveBeenCalledWith(expect.any(String), expect.anything());
   });
 
   it('creates the Archived category if it does not exist', async () => {
-    const { default: command } = await import('./disperse.js');
+    const { default: command } = await import('./drop-army.js');
     await command.execute(makeInteraction({ hasArchivedCategory: false }) as any);
     expect(mockCreateChannel).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Archived', type: ChannelType.GuildCategory }),
@@ -67,13 +67,13 @@ describe('/disperse', () => {
   });
 
   it('reuses an existing Archived category', async () => {
-    const { default: command } = await import('./disperse.js');
+    const { default: command } = await import('./drop-army.js');
     await command.execute(makeInteraction({ hasArchivedCategory: true }) as any);
     expect(mockCreateChannel).not.toHaveBeenCalled();
   });
 
   it('notifies admin', async () => {
-    const { default: command } = await import('./disperse.js');
+    const { default: command } = await import('./drop-army.js');
     await command.execute(makeInteraction() as any);
     expect(notifyAdmin).toHaveBeenCalledWith(
       expect.anything(),
@@ -84,7 +84,7 @@ describe('/disperse', () => {
   it('replies with an error when the army ID does not exist', async () => {
     const db = (await import('../lib/db.js')).default as any;
     db.prepare.mockReturnValue({ get: vi.fn().mockReturnValue(undefined) });
-    const { default: command } = await import('./disperse.js');
+    const { default: command } = await import('./drop-army.js');
     const interaction = makeInteraction();
     await command.execute(interaction as any);
     expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('No army'));

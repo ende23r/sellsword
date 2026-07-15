@@ -4,9 +4,9 @@ import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import type { Command } from '../types.js';
 
-const disperse: Command = {
+const dropArmy: Command = {
   data: new SlashCommandBuilder()
-    .setName('disperse')
+    .setName('drop-army')
     .setDescription('(Admin) Remove an army from play and archive its channel.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addIntegerOption((o) =>
@@ -58,4 +58,4 @@ const disperse: Command = {
   },
 };
 
-export default disperse;
+export default dropArmy;
