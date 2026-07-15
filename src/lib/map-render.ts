@@ -1,6 +1,35 @@
+import Database from 'better-sqlite3';
 import { Resvg } from '@resvg/resvg-js';
-import type { ArmyRow, HexRow, StrongholdRow } from './db.js';
+import type { HexRow, StrongholdRow } from './db.js';
 import { hexCorners, hexToPixel } from './hex.js';
+
+export type ArmyMarker = {
+  hex_q: number;
+  hex_r: number;
+  name: string | null;
+  faction_color: string | null;
+};
+
+export function getArmiesForMap(db: Database.Database): ArmyMarker[] {
+  return db
+    .prepare(
+      `SELECT a.hex_q, a.hex_r, a.name, f.color AS faction_color
+       FROM armies a
+       JOIN commanders c ON c.id = a.commander_id
+       LEFT JOIN factions f ON f.id = c.faction_id`,
+    )
+    .all() as ArmyMarker[];
+}
+
+export function armyInitials(name: string | null): string {
+  if (!name?.trim()) return '?';
+  const tokens = name.trim().split(/\s+/);
+  const parts = tokens.map((t) => {
+    const digits = t.match(/^(\d+)/);
+    return digits ? digits[1] : t[0].toUpperCase();
+  });
+  return parts.join('').slice(0, 3);
+}
 
 const HEX_SIZE = 64; // circumradius in pixels (default; override via renderMap options)
 
@@ -32,7 +61,7 @@ const STRONGHOLD_SYMBOL: Record<string, string> = {
 
 type RenderOptions = {
   visibleCoords?: Set<string>; // 'q,r' strings; undefined = show all (admin view)
-  armyPositions?: ArmyRow[];
+  armyPositions?: ArmyMarker[];
   hexSize?: number; // override default size
 };
 
@@ -159,8 +188,12 @@ export async function renderMap(
       const coordKey = `${army.hex_q},${army.hex_r}`;
       if (options.visibleCoords && !options.visibleCoords.has(coordKey)) continue;
       const [cx, cy] = hexToPixel({ q: army.hex_q, r: army.hex_r }, size, -minX, -minY);
+      const fill = army.faction_color ?? '#e63';
+      const initials = armyInitials(army.name);
+      const r = 10;
       labels.push(
-        `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5" fill="#e63" stroke="#fff" stroke-width="1"/>`,
+        `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r}" fill="${fill}" stroke="#fff" stroke-width="1.5"/>`,
+        `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="9" font-weight="bold" fill="#fff" font-family="monospace">${initials}</text>`,
       );
     }
   }

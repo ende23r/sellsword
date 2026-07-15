@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
-import { getAllArmies, getAllHexes, getAllStrongholds } from './lib/db.js';
-import { renderMap } from './lib/map-render.js';
+import db, { getAllHexes, getAllStrongholds } from './lib/db.js';
+import { getArmiesForMap, renderMap } from './lib/map-render.js';
 
 const args = process.argv.slice(2);
 const outPath = resolve(args[0] ?? 'map.png');
@@ -14,7 +14,7 @@ if (hexes.length === 0) {
 }
 
 const png = await renderMap(hexes, getAllStrongholds(), {
-  armyPositions: getAllArmies(),
+  armyPositions: getArmiesForMap(db),
   hexSize: 128,
 });
 

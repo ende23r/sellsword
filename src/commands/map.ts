@@ -1,7 +1,8 @@
 import { AttachmentBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import { getAllArmies, getAllHexes, getAllStrongholds, getArmyByDiscordId } from '../lib/db.js';
+import { getAllHexes, getAllStrongholds, getArmyByDiscordId } from '../lib/db.js';
+import db from '../lib/db.js';
 import { hexesInRange } from '../lib/hex.js';
-import { renderMap } from '../lib/map-render.js';
+import { getArmiesForMap, renderMap } from '../lib/map-render.js';
 import type { Command } from '../types.js';
 
 const map: Command = {
@@ -24,7 +25,7 @@ const map: Command = {
     }
 
     const strongholds = getAllStrongholds();
-    const armies = getAllArmies();
+    const armies = getArmiesForMap(db);
 
     const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false;
     const fullMap = isAdmin && (interaction.options.getBoolean('full') ?? false);
