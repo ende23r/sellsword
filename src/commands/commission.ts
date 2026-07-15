@@ -46,7 +46,7 @@ const commission: Command = {
       return;
     }
 
-    const channelName = commanderUser.username.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const channelName = armyName.toLowerCase().replace(/[^a-z0-9]/g, '-');
     const channel = await guild.channels.create({
       name: `army-${channelName}`,
       type: ChannelType.GuildText,
