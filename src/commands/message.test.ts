@@ -11,7 +11,7 @@ vi.mock('../lib/admin-notify.js', () => ({
 }));
 
 vi.mock('../lib/db.js', () => {
-  const stmt = { run: vi.fn() };
+  const stmt = { run: vi.fn().mockReturnValue({ lastInsertRowid: 42 }) };
   return {
     default: { prepare: vi.fn().mockReturnValue(stmt) },
     getArmyByDiscordId: vi

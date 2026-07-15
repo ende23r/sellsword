@@ -53,15 +53,17 @@ const message: Command = {
     const timezone = process.env.SCHEDULE_TIMEZONE ?? 'UTC';
     const deliverAt = computeDeliveryTick(dist, new Date(), timezone).toISOString();
 
-    db.prepare(
+    const { lastInsertRowid } = db.prepare(
       `INSERT INTO messages (sender_commander_id, recipient_commander_id, content, delivers_at)
        VALUES (?, ?, ?, ?)`,
     ).run(senderCommander.id, recipientCommander.id, content, deliverAt);
+    const messageId = Number(lastInsertRowid);
 
     const timestamp = new Date().toISOString();
     let sheetOk = true;
     try {
       await logMessage(
+        messageId,
         interaction.user.username,
         recipientUser.username,
         content,

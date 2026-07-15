@@ -99,6 +99,7 @@ export async function removeFromQueueSheet(discordUsername: string): Promise<voi
 // ── Message log tab ────────────────────────────────────────────────────────
 
 export async function logMessage(
+  messageId: number,
   senderUsername: string,
   recipientUsername: string,
   content: string,
@@ -106,6 +107,7 @@ export async function logMessage(
   timestamp: string,
 ): Promise<void> {
   await appendToAdminSheet('Messages', [
+    messageId,
     timestamp,
     senderUsername,
     recipientUsername,
