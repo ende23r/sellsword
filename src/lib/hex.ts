@@ -100,7 +100,12 @@ export function milesPerDay(onRoad: boolean, forcedMarch: boolean, nightMarch: b
 
 // ── Message delivery timing ───────────────────────────────────────────────────
 //
-// Messengers travel on roads at 8 hexes per 24 hours = 3 hours per hex.
+// Rules (SELLSWORD §MESSAGES):
+//   Friendly/neutral territory: 48 miles/day = 8 hexes/day = 3 h/hex
+//   Hostile territory:          36 miles/day = 6 hexes/day = 4 h/hex
+//
+// TODO: detect hostile-territory routes and use 4 h/hex when appropriate.
+// For now we always use the friendly-territory speed.
 //
 // Delivery is tick-snapped: we grant senders the grace of imagining their
 // message left at the last tick, add travel time, then schedule delivery at
@@ -110,7 +115,7 @@ export function milesPerDay(onRoad: boolean, forcedMarch: boolean, nightMarch: b
 // Example: 2 hexes sent just before the 14:00 tick —
 //   last tick = 06:00, travel = 6 h, arrival = 12:00 → delivers at 14:00.
 
-export const MESSENGER_HOURS_PER_HEX = 3;
+export const MESSENGER_HOURS_PER_HEX = 3; // friendly/neutral territory
 
 const TICK_HOURS = [6, 14, 22]; // hours-of-day (local) when ticks fire
 
