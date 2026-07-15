@@ -18,12 +18,26 @@ npm run seed                           # seed from map-seed.json (upserts, keeps
 npm run seed -- maps/my-map.json      # seed from a specific file
 npm run seed -- --clear maps/foo.json # wipe map data then seed fresh
 npm run clear-map                      # wipe all hex and stronghold data, no reseed
+npm run seed-factions                  # create missing Discord roles/categories from faction-seed.json
 npm test             # run all tests (vitest)
 npm run typecheck    # type-check without emitting
 npm run format       # format all files with Prettier
 ```
 
 Requires a `.env` file — copy `.env.example` and fill in the three values.
+
+## Data model: seed data vs. game data
+
+There are two categories of data and they have different entry points:
+
+**Seed data** is set once before the game begins and does not change during play. It is loaded via npm scripts and stored in JSON files that are gitignored (copy from the `.example.json` versions). Seed scripts are idempotent — safe to re-run.
+
+- `map-seed.json` → `npm run seed` — hex terrain, settlements, strongholds, roads, rivers
+- `faction-seed.json` → `npm run seed-factions` — faction names, role colors, optional doc URLs; also creates the corresponding Discord roles and channel categories
+
+**Game data** is created and updated during play by players (via slash commands) or by the update bot (via the daily tick). It never comes from seed files.
+
+When adding a new feature, decide first which category it belongs to. If it is configuration that an admin sets up before the game starts, it is seed data and belongs in a seed script. If it changes during play, it is game data and belongs in a Discord command or tick processor.
 
 ## Ways of working
 
@@ -54,8 +68,10 @@ Key lib files:
 - `src/lib/schema.ts` — DB schema SQL; imported by db.ts and by tests (`new Database(':memory:'); db.exec(DB_SCHEMA)`)
 - `src/lib/daily-update.ts` — thin orchestrator that calls tick-processors functions with the live singleton DB
 - `src/lib/admin-notify.ts` — shared helper for posting a message to the admin channel
+- `src/lib/faction-ops.ts` — `upsertFaction()` for writing to the factions table (injectable DB, used by seed script and commands)
+- `src/lib/faction-sync.ts` — `syncFactions()` creates missing Discord roles/categories and upserts factions into the DB; used by `npm run seed-factions`
 
-Map data lives in `map-seed.json` (copy from `map-seed.example.json`). The seed script (`npm run seed`) is idempotent — re-running it updates existing hexes in place.
+Discord commands (in `src/commands/`): `/queue`, `/unqueue`, `/recruit`, `/commission`, `/retire`, `/move`, `/forage`, `/pace`, `/stance`, `/transfer`, `/message`, `/map`
 
 ## Game Domain (for implementing bot logic)
 
