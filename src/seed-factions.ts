@@ -1,11 +1,27 @@
 import 'dotenv/config';
+import { readFileSync } from 'fs';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { Client, GatewayIntentBits } from 'discord.js';
 import db from './lib/db.js';
-import { readFactionSeed, syncFactions } from './lib/faction-sync.js';
+import { syncFactions, type FactionSeedEntry } from './lib/faction-sync.js';
 
-const factions = readFactionSeed();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pathArg = process.argv[2];
+const seedPath = pathArg ? resolve(pathArg) : join(__dirname, '../faction-seed.json');
+
+let raw: string;
+try {
+  raw = readFileSync(seedPath, 'utf-8');
+} catch {
+  console.error(`Seed file not found: ${seedPath}`);
+  if (!pathArg) console.error('Copy faction-seed.example.json to faction-seed.json and fill it in.');
+  process.exit(1);
+}
+
+const factions: FactionSeedEntry[] = JSON.parse(raw!);
 if (factions.length === 0) {
-  console.error('No factions found. Copy faction-seed.example.json to faction-seed.json and fill it in.');
+  console.error('No factions in seed file.');
   process.exit(1);
 }
 

@@ -18,7 +18,8 @@ npm run seed                           # seed from map-seed.json (upserts, keeps
 npm run seed -- maps/my-map.json      # seed from a specific file
 npm run seed -- --clear maps/foo.json # wipe map data then seed fresh
 npm run clear-map                      # wipe all hex and stronghold data, no reseed
-npm run seed-factions                  # create missing Discord roles/categories from faction-seed.json
+npm run seed-factions                          # seed from faction-seed.json
+npm run seed-factions -- factions/my-game.json # seed from a specific file
 npm test             # run all tests (vitest)
 npm run typecheck    # type-check without emitting
 npm run format       # format all files with Prettier

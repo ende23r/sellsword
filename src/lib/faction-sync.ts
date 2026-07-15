@@ -1,6 +1,3 @@
-import { existsSync, readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { ChannelType } from 'discord.js';
 import type { Guild } from 'discord.js';
 import type Database from 'better-sqlite3';
@@ -40,8 +37,3 @@ export async function syncFactions(
   return log;
 }
 
-export function readFactionSeed(): FactionSeedEntry[] {
-  const seedPath = join(dirname(fileURLToPath(import.meta.url)), '../../faction-seed.json');
-  if (!existsSync(seedPath)) return [];
-  return JSON.parse(readFileSync(seedPath, 'utf-8')) as FactionSeedEntry[];
-}
