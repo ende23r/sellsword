@@ -124,6 +124,15 @@ async function checkArmySheetTemplate(
   }
 }
 
+function checkArmySheetsOwner(): CheckResult {
+  const email = process.env.ARMY_SHEETS_OWNER_EMAIL;
+  return {
+    label: 'ARMY_SHEETS_OWNER_EMAIL is set',
+    ok: !!email,
+    detail: email ? undefined : 'set this to your Google account email so army sheets are owned by you, not the service account',
+  };
+}
+
 async function checkArmySheetsFolder(
   auth: InstanceType<typeof google.auth.GoogleAuth>,
 ): Promise<CheckResult> {
@@ -200,7 +209,7 @@ export async function checkAdminChannel(client: Client): Promise<void> {
 export async function runStartupChecks(): Promise<void> {
   console.log('Running startup checks…');
 
-  const results: CheckResult[] = [...checkEnvVars(), checkTimezone()];
+  const results: CheckResult[] = [...checkEnvVars(), checkTimezone(), checkArmySheetsOwner()];
 
   const { ok: keyOk, auth } = checkServiceAccountKey();
   results.push({

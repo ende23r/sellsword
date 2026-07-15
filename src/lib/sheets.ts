@@ -175,6 +175,16 @@ export async function copyArmySheetTemplate(commanderName: string): Promise<{
   });
   const sheetId = copy.data.id!;
 
+  const ownerEmail = process.env.ARMY_SHEETS_OWNER_EMAIL;
+  if (ownerEmail) {
+    await drive.permissions.create({
+      fileId: sheetId,
+      transferOwnership: true,
+      sendNotificationEmail: false,
+      requestBody: { role: 'owner', type: 'user', emailAddress: ownerEmail },
+    });
+  }
+
   await drive.permissions.create({
     fileId: sheetId,
     requestBody: { role: 'reader', type: 'anyone' },
