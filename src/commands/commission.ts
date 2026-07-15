@@ -1,6 +1,7 @@
 import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
+import { upsertFaction } from '../lib/faction-ops.js';
 import { copyArmySheetTemplate } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
@@ -68,14 +69,17 @@ const commission: Command = {
       console.error('Failed to copy army sheet template:', err);
     }
 
+    const factionId = upsertFaction(db, factionRole.name, factionRole.id, category.id);
+
     const commanderStmt = db.prepare(`
-      INSERT INTO commanders (discord_user_id, discord_channel_id, army_sheet_url)
-      VALUES (?, ?, ?)
+      INSERT INTO commanders (discord_user_id, discord_channel_id, faction_id, army_sheet_url)
+      VALUES (?, ?, ?, ?)
       ON CONFLICT(discord_user_id) DO UPDATE SET
         discord_channel_id = excluded.discord_channel_id,
+        faction_id = excluded.faction_id,
         army_sheet_url = excluded.army_sheet_url
     `);
-    commanderStmt.run(commanderUser.id, channel.id, sheetUrl);
+    commanderStmt.run(commanderUser.id, channel.id, factionId, sheetUrl);
 
     const commander = db
       .prepare('SELECT * FROM commanders WHERE discord_user_id = ?')

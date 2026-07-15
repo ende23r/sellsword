@@ -26,7 +26,7 @@ export const DB_SCHEMA = `
     id                  INTEGER PRIMARY KEY,
     name                TEXT NOT NULL,
     discord_role_id     TEXT NOT NULL UNIQUE,
-    discord_category_id TEXT NOT NULL UNIQUE
+    discord_category_id TEXT UNIQUE
   );
 
   CREATE TABLE IF NOT EXISTS commanders (

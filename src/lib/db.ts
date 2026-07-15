@@ -10,6 +10,24 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.exec(DB_SCHEMA);
 
+// Migration: make factions.discord_category_id nullable if it was created NOT NULL.
+const factionsCategoryCol = db
+  .prepare("SELECT notnull FROM pragma_table_info('factions') WHERE name = 'discord_category_id'")
+  .get() as { notnull: number } | undefined;
+if (factionsCategoryCol?.notnull === 1) {
+  db.exec(`
+    CREATE TABLE factions_new (
+      id                  INTEGER PRIMARY KEY,
+      name                TEXT NOT NULL,
+      discord_role_id     TEXT NOT NULL UNIQUE,
+      discord_category_id TEXT UNIQUE
+    );
+    INSERT OR IGNORE INTO factions_new SELECT * FROM factions;
+    DROP TABLE factions;
+    ALTER TABLE factions_new RENAME TO factions;
+  `);
+}
+
 export type HexRow = {
   id: number;
   q: number;
@@ -66,7 +84,7 @@ export type FactionRow = {
   id: number;
   name: string;
   discord_role_id: string;
-  discord_category_id: string;
+  discord_category_id: string | null;
 };
 
 export type OrderRow = {

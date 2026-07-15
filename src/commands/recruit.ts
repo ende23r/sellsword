@@ -1,6 +1,7 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
+import { upsertFaction } from '../lib/faction-ops.js';
 import type { Command, QueueEntry } from '../types.js';
 
 const QUEUE_ROLE_NAME = 'Queued';
@@ -50,6 +51,7 @@ const recruit: Command = {
       return;
     }
 
+    upsertFaction(db, factionRole.name, factionRole.id);
     await member.roles.add(factionRole.id);
     const queueRole = guild.roles.cache.find((r) => r.name === QUEUE_ROLE_NAME);
     if (queueRole) await member.roles.remove(queueRole);
