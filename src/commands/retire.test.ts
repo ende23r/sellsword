@@ -13,29 +13,37 @@ const mockChannel = {
   permissionOverwrites: { delete: mockDeleteOverwrite },
 };
 
+const factionRole = { id: 'role-1', name: 'Red Faction' };
+
 vi.mock('../lib/db.js', () => {
-  const stmt = {
-    get: vi.fn().mockReturnValue({ discord_channel_id: 'chan-1' }),
+  return {
+    default: {
+      prepare: vi.fn((sql: string) => {
+        if (sql.includes('factions')) {
+          return { all: vi.fn().mockReturnValue([{ discord_role_id: 'role-1' }]) };
+        }
+        return { get: vi.fn().mockReturnValue({ discord_channel_id: 'chan-1' }) };
+      }),
+    },
   };
-  return { default: { prepare: vi.fn().mockReturnValue(stmt) } };
 });
 
 function makeInteraction({
   channelInCache = true,
-  memberHasRole = true,
-}: { channelInCache?: boolean; memberHasRole?: boolean } = {}) {
-  const factionRole = { id: 'role-1', name: 'Red Faction' };
+  memberHasFactionRole = true,
+}: { channelInCache?: boolean; memberHasFactionRole?: boolean } = {}) {
   const commanderUser = { id: 'user-1', username: 'alice', displayName: 'Alice' };
   return {
     options: {
       getUser: vi.fn().mockReturnValue(commanderUser),
-      getRole: vi.fn().mockReturnValue(factionRole),
     },
     guild: {
       members: {
         fetch: vi.fn().mockResolvedValue({
           roles: {
-            cache: { has: vi.fn().mockReturnValue(memberHasRole) },
+            cache: {
+              find: vi.fn().mockReturnValue(memberHasFactionRole ? factionRole : undefined),
+            },
             remove: mockRemoveRole,
           },
         }),
@@ -56,7 +64,7 @@ describe('/retire', () => {
   it('removes the faction role from the member', async () => {
     const { default: command } = await import('./retire.js');
     await command.execute(makeInteraction() as any);
-    expect(mockRemoveRole).toHaveBeenCalledWith(expect.objectContaining({ id: 'role-1' }));
+    expect(mockRemoveRole).toHaveBeenCalledWith(factionRole);
   });
 
   it('removes the permission overwrite on the army channel', async () => {
@@ -81,9 +89,9 @@ describe('/retire', () => {
     );
   });
 
-  it('skips role removal if member does not have the role', async () => {
+  it('skips role removal if member has no faction role', async () => {
     const { default: command } = await import('./retire.js');
-    await command.execute(makeInteraction({ memberHasRole: false }) as any);
+    await command.execute(makeInteraction({ memberHasFactionRole: false }) as any);
     expect(mockRemoveRole).not.toHaveBeenCalled();
   });
 

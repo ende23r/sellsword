@@ -11,9 +11,6 @@ const retire: Command = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addUserOption((o) =>
       o.setName('commander').setDescription('The player to retire').setRequired(true),
-    )
-    .addRoleOption((o) =>
-      o.setName('faction').setDescription('Their faction role to remove').setRequired(true),
     ),
 
   async execute(interaction) {
@@ -21,12 +18,15 @@ const retire: Command = {
 
     const guild = interaction.guild!;
     const commanderUser = interaction.options.getUser('commander', true);
-    const factionRole = interaction.options.getRole('faction', true);
-
     const member = await guild.members.fetch(commanderUser.id);
 
-    if (member.roles.cache.has(factionRole.id)) {
-      await member.roles.remove(factionRole as Parameters<typeof member.roles.remove>[0]);
+    const factionRoleIds = new Set(
+      (db.prepare('SELECT discord_role_id FROM factions').all() as { discord_role_id: string }[])
+        .map((r) => r.discord_role_id),
+    );
+    const factionRole = member.roles.cache.find((r) => factionRoleIds.has(r.id));
+    if (factionRole) {
+      await member.roles.remove(factionRole);
     }
 
     const commander = db
@@ -42,13 +42,14 @@ const retire: Command = {
       }
     }
 
+    const roleNote = factionRole ? ` from **${factionRole.name}**` : '';
     await notifyAdmin(
       interaction.client,
-      `🏳️ **${commanderUser.username}** retired from **${factionRole.name}**${channelMention}`,
+      `🏳️ **${commanderUser.username}** retired${roleNote}${channelMention}`,
     );
 
     await interaction.editReply(
-      `✅ **${commanderUser.username}** retired. Faction role removed${channelMention ? ' and channel access revoked' : ''}.`,
+      `✅ **${commanderUser.username}** retired.${factionRole ? ` Removed from **${factionRole.name}**.` : ''}${channelMention ? ' Channel access revoked.' : ''}`,
     );
   },
 };
