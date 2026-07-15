@@ -16,13 +16,15 @@ export async function syncFactions(
   guild: Guild,
   db: Database.Database,
   factions: FactionSeedEntry[],
-): Promise<void> {
+): Promise<string[]> {
+  const log: string[] = [];
   for (const entry of factions) {
     const existingRole = guild.roles.cache.find((r) => r.name === entry.name);
     const role = existingRole ?? (await guild.roles.create({
       name: entry.name,
       ...(entry.color ? { color: entry.color as `#${string}` } : {}),
     }));
+    log.push(existingRole ? `Found role: ${entry.name}` : `Created role: ${entry.name}`);
 
     const existingCategory = guild.channels.cache.find(
       (c) => c.type === ChannelType.GuildCategory && c.name === entry.name,
@@ -31,9 +33,11 @@ export async function syncFactions(
       name: entry.name,
       type: ChannelType.GuildCategory,
     }));
+    log.push(existingCategory ? `Found category: ${entry.name}` : `Created category: ${entry.name}`);
 
     upsertFaction(db, entry.name, role.id, category.id, entry.color, entry.doc_url);
   }
+  return log;
 }
 
 export function readFactionSeed(): FactionSeedEntry[] {
