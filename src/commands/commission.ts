@@ -2,13 +2,17 @@ import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.j
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { upsertFaction } from '../lib/faction-ops.js';
-import { copyArmySheetTemplate } from '../lib/sheets.js';
 import type { Command } from '../types.js';
+
+// TODO: automate sheet creation once a Drive solution that works with
+// personal Gmail service accounts is found (quota is 0, ownership transfer
+// requires Workspace, Shared Drives require Workspace Business).
+// For now the admin copies the template manually and pastes the ID here.
 
 const commission: Command = {
   data: new SlashCommandBuilder()
     .setName('commission')
-    .setDescription('(Admin) Create an army channel and army sheet for a new commander.')
+    .setDescription('(Admin) Create an army channel for a new commander.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addUserOption((o) =>
       o.setName('commander').setDescription('The player to commission').setRequired(true),
@@ -24,6 +28,12 @@ const commission: Command = {
     )
     .addIntegerOption((o) =>
       o.setName('start_r').setDescription('Starting hex R coordinate').setRequired(true),
+    )
+    .addStringOption((o) =>
+      o
+        .setName('sheet_id')
+        .setDescription('Army sheet ID or URL (copy the template manually first)')
+        .setRequired(false),
     ),
 
   async execute(interaction) {
@@ -35,6 +45,7 @@ const commission: Command = {
     const armyName = interaction.options.getString('army_name', true);
     const startQ = interaction.options.getInteger('start_q', true);
     const startR = interaction.options.getInteger('start_r', true);
+    const sheetInput = interaction.options.getString('sheet_id');
 
     const category = guild.channels.cache.find(
       (c) => c.type === ChannelType.GuildCategory && c.name === factionRole.name,
@@ -62,11 +73,10 @@ const commission: Command = {
     });
 
     let sheetUrl: string | null = null;
-    try {
-      const sheet = await copyArmySheetTemplate(`${armyName} (${commanderUser.username})`);
-      sheetUrl = sheet.url;
-    } catch (err) {
-      console.error('Failed to copy army sheet template:', err);
+    if (sheetInput) {
+      const match = sheetInput.match(/\/d\/([^/]+)/);
+      const sheetId = match ? match[1] : sheetInput;
+      sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}`;
     }
 
     const factionId = upsertFaction(db, factionRole.name, factionRole.id, category.id);
@@ -97,11 +107,11 @@ const commission: Command = {
 
     await notifyAdmin(
       interaction.client,
-      `⚔️ **${commanderUser.username}** commissioned as commander of **${armyName}** in faction **${factionRole.name}**. Channel: ${channel}${sheetUrl ? ` | Sheet: ${sheetUrl}` : ' | ⚠️ Sheet creation failed.'}`,
+      `⚔️ **${commanderUser.username}** commissioned as commander of **${armyName}** in faction **${factionRole.name}**. Channel: ${channel}${sheetUrl ? ` | Sheet: ${sheetUrl}` : ''}`,
     );
 
     await interaction.editReply(
-      `✅ **${commanderUser.username}** commissioned!\nChannel: ${channel}\n${sheetUrl ? `Army sheet: ${sheetUrl}` : '⚠️ Army sheet creation failed — add manually.'}`,
+      `✅ **${commanderUser.username}** commissioned!\nChannel: ${channel}${sheetUrl ? `\nArmy sheet: ${sheetUrl}` : ''}`,
     );
   },
 };

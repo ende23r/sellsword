@@ -153,48 +153,6 @@ export async function syncArmySheet(sheetId: string, army: ArmyRow): Promise<voi
   });
 }
 
-// ── Commission: copy template and make it public ───────────────────────────
-
-export async function copyArmySheetTemplate(commanderName: string): Promise<{
-  sheetId: string;
-  url: string;
-}> {
-  const templateId = process.env.ARMY_SHEET_TEMPLATE_ID;
-  if (!templateId) throw new Error('ARMY_SHEET_TEMPLATE_ID is not set in .env');
-
-  const auth = getAuth();
-  const drive = google.drive({ version: 'v3', auth });
-
-  const folderId = process.env.ARMY_SHEETS_FOLDER_ID;
-  const copy = await drive.files.copy({
-    fileId: templateId,
-    requestBody: {
-      name: `Army Sheet — ${commanderName}`,
-      ...(folderId ? { parents: [folderId] } : {}),
-    },
-  });
-  const sheetId = copy.data.id!;
-
-  const ownerEmail = process.env.ARMY_SHEETS_OWNER_EMAIL;
-  if (ownerEmail) {
-    await drive.permissions.create({
-      fileId: sheetId,
-      transferOwnership: true,
-      sendNotificationEmail: false,
-      requestBody: { role: 'owner', type: 'user', emailAddress: ownerEmail },
-    });
-  }
-
-  await drive.permissions.create({
-    fileId: sheetId,
-    requestBody: { role: 'reader', type: 'anyone' },
-  });
-
-  return {
-    sheetId,
-    url: `https://docs.google.com/spreadsheets/d/${sheetId}`,
-  };
-}
 
 export async function syncAllArmySheets(
   commanders: CommanderRow[],

@@ -124,43 +124,6 @@ async function checkArmySheetTemplate(
   }
 }
 
-function checkArmySheetsOwner(): CheckResult {
-  const email = process.env.ARMY_SHEETS_OWNER_EMAIL;
-  return {
-    label: 'ARMY_SHEETS_OWNER_EMAIL is set',
-    ok: !!email,
-    detail: email ? undefined : 'set this to your Google account email so army sheets are owned by you, not the service account',
-  };
-}
-
-async function checkArmySheetsFolder(
-  auth: InstanceType<typeof google.auth.GoogleAuth>,
-): Promise<CheckResult> {
-  const folderId = process.env.ARMY_SHEETS_FOLDER_ID;
-  if (!folderId)
-    return {
-      label: 'ARMY_SHEETS_FOLDER_ID is set',
-      ok: false,
-      detail: 'set this to a Drive folder owned by your Google account to avoid service account storage quota errors',
-    };
-  try {
-    const drive = google.drive({ version: 'v3', auth });
-    const res = await drive.files.get({ fileId: folderId, fields: 'id,name,capabilities' });
-    const canEdit = (res.data.capabilities as any)?.canEdit ?? false;
-    return {
-      label: `Army sheets folder "${res.data.name}" is accessible`,
-      ok: canEdit,
-      detail: canEdit ? undefined : 'service account cannot write to this folder — share it with Editor access',
-    };
-  } catch (err) {
-    return {
-      label: 'Army sheets folder is accessible',
-      ok: false,
-      detail: (err as Error).message,
-    };
-  }
-}
-
 // ── Discord checks (run after ClientReady) ────────────────────────────────
 
 export function checkQueueRole(guild: { roles: { cache: { find(fn: (r: { name: string }) => boolean): unknown } } }): CheckResult {
@@ -209,7 +172,7 @@ export async function checkAdminChannel(client: Client): Promise<void> {
 export async function runStartupChecks(): Promise<void> {
   console.log('Running startup checks…');
 
-  const results: CheckResult[] = [...checkEnvVars(), checkTimezone(), checkArmySheetsOwner()];
+  const results: CheckResult[] = [...checkEnvVars(), checkTimezone()];
 
   const { ok: keyOk, auth } = checkServiceAccountKey();
   results.push({
@@ -219,12 +182,11 @@ export async function runStartupChecks(): Promise<void> {
   });
 
   if (auth) {
-    const [adminSheetResults, template, folder] = await Promise.all([
+    const [adminSheetResults, template] = await Promise.all([
       checkAdminSheet(auth),
       checkArmySheetTemplate(auth),
-      checkArmySheetsFolder(auth),
     ]);
-    results.push(...adminSheetResults, template, folder);
+    results.push(...adminSheetResults, template);
   } else {
     results.push(
       {
