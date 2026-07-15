@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
-import { hexDistance, messageDeliveryDays } from '../lib/hex.js';
+import { computeDeliveryTick, hexDistance } from '../lib/hex.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { logMessage } from '../lib/sheets.js';
 import type { Command } from '../types.js';
@@ -50,8 +50,8 @@ const message: Command = {
       { q: senderArmy.hex_q, r: senderArmy.hex_r },
       { q: recipientArmy.hex_q, r: recipientArmy.hex_r },
     );
-    const deliveryDays = messageDeliveryDays(dist);
-    const deliverAt = new Date(Date.now() + deliveryDays * 24 * 60 * 60 * 1000).toISOString();
+    const timezone = process.env.SCHEDULE_TIMEZONE ?? 'UTC';
+    const deliverAt = computeDeliveryTick(dist, new Date(), timezone).toISOString();
 
     db.prepare(
       `INSERT INTO messages (sender_commander_id, recipient_commander_id, content, delivers_at)
@@ -78,8 +78,9 @@ const message: Command = {
       `📨 **${interaction.user.username}** → **${recipientUser.username}** | Distance: ${dist} hexes (${dist * 6} miles) | Delivers: <t:${Math.floor(new Date(deliverAt).getTime() / 1000)}:R>\n> ${content}${sheetOk ? '' : '\n⚠️ Sheet logging failed — log this message manually.'}`,
     );
 
+    const deliveryTs = Math.floor(new Date(deliverAt).getTime() / 1000);
     await interaction.reply({
-      content: `✅ Message dispatched.\n**Recipient:** ${recipientUser}\n**Distance:** ${dist} hexes (${dist * 6} miles)\n**Estimated delivery:** ${deliveryDays} day${deliveryDays === 1 ? '' : 's'} (<t:${Math.floor(new Date(deliverAt).getTime() / 1000)}:R>)`,
+      content: `✅ Message dispatched.\n**Recipient:** ${recipientUser}\n**Distance:** ${dist} hexes (${dist * 6} miles)\n**Estimated delivery:** <t:${deliveryTs}:f> (<t:${deliveryTs}:R>)`,
       ephemeral: true,
     });
   },

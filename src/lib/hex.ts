@@ -98,8 +98,74 @@ export function milesPerDay(onRoad: boolean, forcedMarch: boolean, nightMarch: b
   return nightMarch ? march + (onRoad ? 6 : 0) : march;
 }
 
-// Days to deliver a message over a given hex distance (assumes friendly territory).
-export const MESSAGE_SPEED_MILES_PER_DAY = 48;
-export function messageDeliveryDays(hexDist: number): number {
-  return Math.ceil((hexDist * 6) / MESSAGE_SPEED_MILES_PER_DAY);
+// ── Message delivery timing ───────────────────────────────────────────────────
+//
+// Messengers travel on roads at 8 hexes per 24 hours = 3 hours per hex.
+//
+// Delivery is tick-snapped: we grant senders the grace of imagining their
+// message left at the last tick, add travel time, then schedule delivery at
+// the first tick that fires after the messenger would arrive.
+//
+// Ticks fire at 06:00, 14:00, 22:00 in SCHEDULE_TIMEZONE (every 8 hours).
+// Example: 2 hexes sent just before the 14:00 tick —
+//   last tick = 06:00, travel = 6 h, arrival = 12:00 → delivers at 14:00.
+
+export const MESSENGER_HOURS_PER_HEX = 3;
+
+const TICK_HOURS = [6, 14, 22]; // hours-of-day (local) when ticks fire
+
+// UTC offset for `date` in `timezone`, in milliseconds.
+// Positive = local clock ahead of UTC (e.g. UTC+5:30 → +19800000).
+function getOffsetMs(date: Date, timezone: string): number {
+  const toMs = (s: string) => new Date(s).getTime();
+  return (
+    toMs(date.toLocaleString('en-US', { timeZone: timezone })) -
+    toMs(date.toLocaleString('en-US', { timeZone: 'UTC' }))
+  );
+}
+
+// UTC Date when the local clock in `timezone` shows `localHour:00:00`
+// on the same calendar date (in that timezone) as `ref`.
+// Two-pass to stay accurate across DST transitions at the tick boundary.
+function utcForLocalHourOnDay(ref: Date, localHour: number, timezone: string): Date {
+  const offsetMs = getOffsetMs(ref, timezone);
+  const localMs = ref.getTime() + offsetMs;
+  const localMidnightMs = localMs - (localMs % 86400000);
+  const localTickMs = localMidnightMs + localHour * 3600000;
+  const utcMs1 = localTickMs - offsetMs;
+  const offsetAtTick = getOffsetMs(new Date(utcMs1), timezone);
+  return new Date(localTickMs - offsetAtTick);
+}
+
+// The most recent tick time at or before `now`.
+export function lastTickBefore(now: Date, timezone: string): Date {
+  const candidates: Date[] = [];
+  for (const dayOffset of [0, -1]) {
+    const ref = new Date(now.getTime() + dayOffset * 86400000);
+    for (const h of TICK_HOURS) {
+      const t = utcForLocalHourOnDay(ref, h, timezone);
+      if (t.getTime() <= now.getTime()) candidates.push(t);
+    }
+  }
+  return candidates.sort((a, b) => b.getTime() - a.getTime())[0];
+}
+
+// The next tick time strictly after `t`.
+export function nextTickAfter(t: Date, timezone: string): Date {
+  const candidates: Date[] = [];
+  for (const dayOffset of [0, 1]) {
+    const ref = new Date(t.getTime() + dayOffset * 86400000);
+    for (const h of TICK_HOURS) {
+      const tick = utcForLocalHourOnDay(ref, h, timezone);
+      if (tick.getTime() > t.getTime()) candidates.push(tick);
+    }
+  }
+  return candidates.sort((a, b) => a.getTime() - b.getTime())[0];
+}
+
+// The tick at which a message traveling `hexDist` hexes will be delivered.
+export function computeDeliveryTick(hexDist: number, now: Date, timezone: string): Date {
+  const start = lastTickBefore(now, timezone);
+  const arrival = new Date(start.getTime() + hexDist * MESSENGER_HOURS_PER_HEX * 3600000);
+  return nextTickAfter(arrival, timezone);
 }

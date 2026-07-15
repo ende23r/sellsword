@@ -31,7 +31,7 @@ vi.mock('../lib/db.js', () => {
 
 vi.mock('../lib/hex.js', () => ({
   hexDistance: vi.fn().mockReturnValue(3),
-  messageDeliveryDays: vi.fn().mockReturnValue(1),
+  computeDeliveryTick: vi.fn().mockReturnValue(new Date('2026-07-15T14:00:00Z')),
 }));
 
 function makeInteraction() {
