@@ -5,6 +5,8 @@ import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { startScheduler } from './lib/scheduler.js';
 import { checkAdminChannel, runStartupChecks } from './lib/startup-check.js';
+import { readFactionSeed, syncFactions } from './lib/faction-sync.js';
+import db from './lib/db.js';
 import type { Command } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +28,14 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.once(Events.ClientReady, async (c) => {
   console.log(`Ready! Logged in as ${c.user.tag}`);
   await checkAdminChannel(c);
+
+  const guildId = process.env.DISCORD_GUILD_ID;
+  const guild = guildId ? c.guilds.cache.get(guildId) : undefined;
+  if (guild) {
+    const factions = readFactionSeed();
+    if (factions.length > 0) await syncFactions(guild, db, factions);
+  }
+
   if (!PAUSED) startScheduler(c);
 });
 

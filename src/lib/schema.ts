@@ -25,6 +25,8 @@ export const DB_SCHEMA = `
   CREATE TABLE IF NOT EXISTS factions (
     id                  INTEGER PRIMARY KEY,
     name                TEXT NOT NULL,
+    color               TEXT,
+    doc_url             TEXT,
     discord_role_id     TEXT NOT NULL UNIQUE,
     discord_category_id TEXT UNIQUE
   );

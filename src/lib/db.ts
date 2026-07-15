@@ -10,21 +10,30 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.exec(DB_SCHEMA);
 
-// Migration: make factions.discord_category_id nullable if it was created NOT NULL.
+// Migrations for factions table.
 const factionsCols = db.pragma('table_info(factions)') as { name: string; notnull: number }[];
-const factionsCategoryCol = factionsCols.find((c) => c.name === 'discord_category_id');
-if (factionsCategoryCol?.notnull === 1) {
+const factionsColNames = new Set(factionsCols.map((c) => c.name));
+
+// Make discord_category_id nullable if it was created NOT NULL.
+const categoryCol = factionsCols.find((c) => c.name === 'discord_category_id');
+if (categoryCol?.notnull === 1) {
   db.exec(`
     CREATE TABLE factions_new (
       id                  INTEGER PRIMARY KEY,
       name                TEXT NOT NULL,
+      color               TEXT,
+      doc_url             TEXT,
       discord_role_id     TEXT NOT NULL UNIQUE,
       discord_category_id TEXT UNIQUE
     );
-    INSERT OR IGNORE INTO factions_new SELECT * FROM factions;
+    INSERT OR IGNORE INTO factions_new (id, name, discord_role_id, discord_category_id)
+      SELECT id, name, discord_role_id, discord_category_id FROM factions;
     DROP TABLE factions;
     ALTER TABLE factions_new RENAME TO factions;
   `);
+} else {
+  if (!factionsColNames.has('color')) db.exec('ALTER TABLE factions ADD COLUMN color TEXT');
+  if (!factionsColNames.has('doc_url')) db.exec('ALTER TABLE factions ADD COLUMN doc_url TEXT');
 }
 
 export type HexRow = {
@@ -82,6 +91,8 @@ export type ArmyRow = {
 export type FactionRow = {
   id: number;
   name: string;
+  color: string | null;
+  doc_url: string | null;
   discord_role_id: string;
   discord_category_id: string | null;
 };
