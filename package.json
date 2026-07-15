@@ -9,6 +9,7 @@
     "render-map": "tsx src/render-map.ts",
     "seed": "tsx src/seed.ts",
     "clear-map": "tsx src/seed.ts --clear",
+    "seed-factions": "tsx src/seed-factions.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write ."
