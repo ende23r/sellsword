@@ -50,12 +50,20 @@ describe('/gmping', () => {
     expect(mockSend).toHaveBeenCalledWith(expect.stringContaining('Orange'));
   });
 
-  it('replies ephemerally to the player', async () => {
+  it('replies publicly (non-ephemeral) so GMs can respond', async () => {
+    const { default: command } = await import('./gmping.js');
+    const interaction = makeInteraction();
+    await command.execute(interaction as any);
+    const replyArg = vi.mocked(interaction.reply).mock.calls[0][0] as any;
+    expect(replyArg.ephemeral).toBeFalsy();
+  });
+
+  it('includes the ping content in the reply', async () => {
     const { default: command } = await import('./gmping.js');
     const interaction = makeInteraction();
     await command.execute(interaction as any);
     expect(interaction.reply).toHaveBeenCalledWith(
-      expect.objectContaining({ ephemeral: true, content: expect.stringContaining('✅') }),
+      expect.objectContaining({ content: expect.stringContaining('Can I recruit mercenaries?') }),
     );
   });
 
@@ -64,7 +72,7 @@ describe('/gmping', () => {
     const { default: command } = await import('./gmping.js');
     const interaction = makeInteraction();
     await command.execute(interaction as any);
-    expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({ ephemeral: true }));
+    expect(interaction.reply).toHaveBeenCalled();
     expect(mockSend).not.toHaveBeenCalled();
   });
 
@@ -74,7 +82,7 @@ describe('/gmping', () => {
     const { default: command } = await import('./gmping.js');
     const interaction = makeInteraction();
     await command.execute(interaction as any);
-    expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({ ephemeral: true }));
+    expect(interaction.reply).toHaveBeenCalled();
     expect(mockSend).toHaveBeenCalledWith(expect.stringContaining('not in game'));
   });
 });

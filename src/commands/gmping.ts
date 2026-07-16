@@ -64,8 +64,7 @@ const gmping: Command = {
     }
 
     await interaction.reply({
-      content: "✅ Your ping has been sent to the GMs. They'll respond when they can.",
-      ephemeral: true,
+      content: `📨 **GM Ping** from ${interaction.user}\n> ${content.replace(/\n/g, '\n> ')}\n_Sent to the GMs — they'll respond when they can._`,
     });
   },
 };
