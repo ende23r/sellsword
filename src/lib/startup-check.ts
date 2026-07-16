@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { google } from 'googleapis';
 import type { Client } from 'discord.js';
-import { checkQueueTab } from './sheet-checks.js';
+import { checkMessagesTab, checkQueueTab, checkStatsTab } from './sheet-checks.js';
 
 type CheckResult = { label: string; ok: boolean; detail?: string };
 
@@ -94,8 +94,11 @@ async function checkAdminSheet(
       label: `Admin sheet "${res.data.properties?.title}" is accessible`,
       ok: true,
     };
-    const tabChecks = await checkQueueTab(sheets, sheetId);
-    return [accessible, ...tabChecks];
+    const [queueChecks, messagesChecks] = await Promise.all([
+      checkQueueTab(sheets, sheetId),
+      checkMessagesTab(sheets, sheetId),
+    ]);
+    return [accessible, ...queueChecks, ...messagesChecks];
   } catch (err) {
     return [{ label: 'Admin sheet is accessible', ok: false, detail: (err as Error).message }];
   }
@@ -103,24 +106,34 @@ async function checkAdminSheet(
 
 async function checkArmySheetTemplate(
   auth: InstanceType<typeof google.auth.GoogleAuth>,
-): Promise<CheckResult> {
+): Promise<CheckResult[]> {
   const templateId = process.env.ARMY_SHEET_TEMPLATE_ID;
   if (!templateId)
-    return {
-      label: 'Army sheet template is accessible',
-      ok: false,
-      detail: 'ARMY_SHEET_TEMPLATE_ID not set',
-    };
+    return [
+      {
+        label: 'Army sheet template is accessible',
+        ok: false,
+        detail: 'ARMY_SHEET_TEMPLATE_ID not set',
+      },
+    ];
   try {
     const drive = google.drive({ version: 'v3', auth });
     const res = await drive.files.get({ fileId: templateId, fields: 'id,name' });
-    return { label: `Army sheet template "${res.data.name}" is accessible`, ok: true };
-  } catch (err) {
-    return {
-      label: 'Army sheet template is accessible',
-      ok: false,
-      detail: (err as Error).message,
+    const accessible: CheckResult = {
+      label: `Army sheet template "${res.data.name}" is accessible`,
+      ok: true,
     };
+    const sheets = google.sheets({ version: 'v4', auth });
+    const statsChecks = await checkStatsTab(sheets, templateId);
+    return [accessible, ...statsChecks];
+  } catch (err) {
+    return [
+      {
+        label: 'Army sheet template is accessible',
+        ok: false,
+        detail: (err as Error).message,
+      },
+    ];
   }
 }
 
@@ -182,11 +195,11 @@ export async function runStartupChecks(): Promise<void> {
   });
 
   if (auth) {
-    const [adminSheetResults, template] = await Promise.all([
+    const [adminSheetResults, templateResults] = await Promise.all([
       checkAdminSheet(auth),
       checkArmySheetTemplate(auth),
     ]);
-    results.push(...adminSheetResults, template);
+    results.push(...adminSheetResults, ...templateResults);
   } else {
     results.push(
       {
