@@ -2,7 +2,7 @@
 // be tested with an in-memory DB without touching the live singleton.
 
 import type Database from 'better-sqlite3';
-import type { Client, TextChannel } from 'discord.js'; // type-only: no side effects
+import { EmbedBuilder, type Client, type TextChannel } from 'discord.js';
 import type { ArmyRow, HexRow, OrderRow } from './db.js'; // type-only: no side effects
 import { findPath, hexesInRange } from './hex.js';
 
@@ -213,6 +213,14 @@ const UTC_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 const UTC_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
                     'July', 'August', 'September', 'October', 'November', 'December'];
 
+export function supplyColor(daysLeft: number | null): number {
+  if (daysLeft === null || daysLeft > 14) return 0x2ecc71; // green
+  if (daysLeft >= 8) return 0xf1c40f;                      // yellow
+  if (daysLeft >= 4) return 0xe67e22;                      // orange
+  if (daysLeft >= 1) return 0xe74c3c;                      // red
+  return 0x922b21;                                          // dark red (out)
+}
+
 export function formatDateUTC(date: Date): string {
   const d = date.getUTCDate();
   const suffix = (d === 1 || d === 21 || d === 31) ? 'st'
@@ -241,24 +249,27 @@ export async function postSupplyUpdates(
 
     const consumption = army.infantry + army.noncombatants + (army.cavalry + army.wagons) * 10;
     const daysLeft = consumption > 0 ? Math.floor(army.supplies / consumption) : null;
-    const sheetPart = army.army_sheet_url
-      ? ` • [Open Sheet](<${army.army_sheet_url}>)`
-      : '';
 
-    let msg =
-      `⚡ Status: ${army.name ?? 'Unknown'}\n` +
-      `📅 ${formatDateUTC(now)} UTC${sheetPart}\n` +
+    let description =
+      `📅 ${formatDateUTC(now)} UTC\n` +
       `📦 Supplies ${army.supplies.toLocaleString()} • 📉 Cons ${consumption.toLocaleString()}/d • ⏰ Days ${daysLeft ?? '∞'}`;
 
     if (daysLeft !== null) {
       const zeroDate = new Date(now.getTime() + daysLeft * 86400000);
-      msg += `\n🚨 Zero Date ${formatDateUTC(zeroDate)} UTC`;
+      description += `\n🚨 Zero Date ${formatDateUTC(zeroDate)} UTC`;
     }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`⚡ Status: ${army.name ?? 'Unknown'}`)
+      .setColor(supplyColor(daysLeft))
+      .setDescription(description);
+
+    if (army.army_sheet_url) embed.setURL(army.army_sheet_url);
 
     try {
       const ch = await client.channels.fetch(army.discord_channel_id);
       if (ch?.isTextBased()) {
-        await (ch as TextChannel).send(msg);
+        await (ch as TextChannel).send({ embeds: [embed] });
       }
     } catch {
       log.push(`⚠️ Failed to post supply update to channel ${army.discord_channel_id}.`);

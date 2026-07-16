@@ -8,6 +8,7 @@ import {
   postSupplyUpdates,
   processForage,
   processMovement,
+  supplyColor,
 } from './tick-processors.js';
 
 function makeDb() {
@@ -429,6 +430,34 @@ describe('formatDateUTC', () => {
   });
 });
 
+// ── supplyColor ───────────────────────────────────────────────────────────────
+
+describe('supplyColor', () => {
+  it('returns green for > 14 days or no consumption', () => {
+    expect(supplyColor(15)).toBe(0x2ecc71);
+    expect(supplyColor(null)).toBe(0x2ecc71);
+  });
+
+  it('returns yellow for 8–14 days', () => {
+    expect(supplyColor(14)).toBe(0xf1c40f);
+    expect(supplyColor(8)).toBe(0xf1c40f);
+  });
+
+  it('returns orange for 4–7 days', () => {
+    expect(supplyColor(7)).toBe(0xe67e22);
+    expect(supplyColor(4)).toBe(0xe67e22);
+  });
+
+  it('returns red for 1–3 days', () => {
+    expect(supplyColor(3)).toBe(0xe74c3c);
+    expect(supplyColor(1)).toBe(0xe74c3c);
+  });
+
+  it('returns dark red when out of supplies', () => {
+    expect(supplyColor(0)).toBe(0x922b21);
+  });
+});
+
 // ── postSupplyUpdates ─────────────────────────────────────────────────────────
 
 describe('postSupplyUpdates', () => {
@@ -445,7 +474,12 @@ describe('postSupplyUpdates', () => {
     };
   }
 
-  it('posts a status message to the army channel', async () => {
+  function getEmbed(send: ReturnType<typeof vi.fn>) {
+    const arg = send.mock.calls[0][0] as { embeds: { data: { title?: string; description?: string; color?: number; url?: string } }[] };
+    return arg.embeds[0].data;
+  }
+
+  it('posts an embed to the army channel', async () => {
     const id = seedArmy(db, { name: 'Iron Legion', infantry: 1000, supplies: 5000 });
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
 
@@ -453,11 +487,21 @@ describe('postSupplyUpdates', () => {
     await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
 
     expect(send).toHaveBeenCalledOnce();
-    const msg: string = send.mock.calls[0][0];
-    expect(msg).toContain('Iron Legion');
-    expect(msg).toContain('Supplies');
-    expect(msg).toContain('1,000/d');
-    expect(msg).toContain('Days 5');
+    const embed = getEmbed(send);
+    expect(embed.title).toContain('Iron Legion');
+    expect(embed.description).toContain('Supplies');
+    expect(embed.description).toContain('1,000/d');
+    expect(embed.description).toContain('Days 5');
+  });
+
+  it('sets the embed color based on days remaining', async () => {
+    const id = seedArmy(db, { infantry: 1000, supplies: 5000 }); // 5 days → orange
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+
+    expect(getEmbed(send).color).toBe(0xe67e22); // orange: 4–7 days
   });
 
   it('skips armies with no discord_channel_id', async () => {
@@ -468,7 +512,7 @@ describe('postSupplyUpdates', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('includes a sheet link when army_sheet_url is set', async () => {
+  it('sets embed URL to army sheet when available', async () => {
     const id = seedArmy(db, { name: 'Riders', cavalry: 100, supplies: 10000 });
     db.prepare('UPDATE commanders SET discord_channel_id = ?, army_sheet_url = ? WHERE id = ?')
       .run('ch-2', 'https://docs.google.com/spreadsheets/d/abc', id);
@@ -476,21 +520,19 @@ describe('postSupplyUpdates', () => {
     const send = vi.fn().mockResolvedValue(undefined);
     await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
 
-    const msg: string = send.mock.calls[0][0];
-    expect(msg).toContain('Open Sheet');
-    expect(msg).toContain('https://docs.google.com/spreadsheets/d/abc');
+    expect(getEmbed(send).url).toBe('https://docs.google.com/spreadsheets/d/abc');
   });
 
-  it('shows zero date when consumption > 0', async () => {
+  it('shows zero date in description when consumption > 0', async () => {
     const id = seedArmy(db, { infantry: 1000, supplies: 3000 });
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-3', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
     await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
 
-    const msg: string = send.mock.calls[0][0];
-    expect(msg).toContain('Zero Date');
-    expect(msg).toContain('July 19'); // 3000/1000 = 3 days out
+    const desc = getEmbed(send).description ?? '';
+    expect(desc).toContain('Zero Date');
+    expect(desc).toContain('July 19'); // 3000/1000 = 3 days out
   });
 
   it('omits zero date and shows ∞ when consumption is zero', async () => {
@@ -500,9 +542,9 @@ describe('postSupplyUpdates', () => {
     const send = vi.fn().mockResolvedValue(undefined);
     await postSupplyUpdates(db, makeClient(send) as never, [], new Date());
 
-    const msg: string = send.mock.calls[0][0];
-    expect(msg).toContain('∞');
-    expect(msg).not.toContain('Zero Date');
+    const desc = getEmbed(send).description ?? '';
+    expect(desc).toContain('∞');
+    expect(desc).not.toContain('Zero Date');
   });
 
   it('logs a warning when channel fetch fails', async () => {
