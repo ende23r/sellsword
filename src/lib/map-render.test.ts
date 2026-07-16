@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import { armyInitials, getArmiesForMap, getPlayerMapHexes } from './map-render.js';
+import { armyInitials, getArmiesForMap, getPlayerMapHexes, trianglePoints } from './map-render.js';
 import type { HexRow } from './db.js';
 
 function makeHex(q: number, r: number): HexRow {
@@ -139,5 +139,30 @@ describe('getPlayerMapHexes', () => {
       { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 }].map(({ q, r }) => makeHex(q, r));
     const { hexes } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 1);
     expect(hexes.length).toBe(7); // fog ring hexes don't exist, so nothing added
+  });
+});
+
+describe('trianglePoints', () => {
+  it('produces exactly 3 point pairs', () => {
+    const pts = trianglePoints(0, 0, 10);
+    expect(pts.trim().split(' ')).toHaveLength(3);
+  });
+
+  it('all points lie on the circumradius', () => {
+    const r = 10;
+    const pts = trianglePoints(5, 5, r);
+    for (const pair of pts.trim().split(' ')) {
+      const [x, y] = pair.split(',').map(Number);
+      const dist = Math.hypot(x - 5, y - 5);
+      expect(dist).toBeCloseTo(r, 0);
+    }
+  });
+
+  it('top vertex is at the minimum y (triangle points up)', () => {
+    const pts = trianglePoints(0, 0, 10);
+    const ys = pts.trim().split(' ').map((p: string) => Number(p.split(',')[1]));
+    const minY = Math.min(...ys);
+    // top vertex is at angle -90°, so y = -r ≈ -10
+    expect(minY).toBeCloseTo(-10, 0);
   });
 });

@@ -39,7 +39,7 @@
       "terrain": "flatland",
       "settlement": 30,
       "roads": ["E", "W"],
-      "rivers": []
+      "rivers": ["E", "SE"]
     },
     {
       "q": 3,
@@ -69,8 +69,8 @@
       "r": 1,
       "terrain": "hills",
       "settlement": 40,
-      "roads": [],
-      "rivers": []
+      "roads": ["W", "SE"],
+      "rivers": ["E"]
     },
     {
       "q": 2,
@@ -78,7 +78,7 @@
       "terrain": "hills",
       "settlement": 40,
       "roads": [],
-      "rivers": []
+      "rivers": ["W", "SW"]
     },
     {
       "q": 3,
@@ -89,6 +89,116 @@
       "rivers": []
     },
     {
+      "q": 0,
+      "r": 2,
+      "terrain": "forest",
+      "settlement": 60,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 1,
+      "r": 2,
+      "terrain": "hills",
+      "settlement": 40,
+      "roads": ["NW", "SW"],
+      "rivers": ["E"],
+      "stronghold": {
+        "name": "Tutorial Fort",
+        "type": "fortress",
+        "garrison": 250,
+        "threshold": 15,
+        "controlled_by": null
+      }
+    },
+    {
+      "q": 2,
+      "r": 2,
+      "terrain": "hills",
+      "settlement": 40,
+      "roads": [],
+      "rivers": ["W"]
+    },
+    {
+      "q": 3,
+      "r": 2,
+      "terrain": "forest",
+      "settlement": 40,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 0,
+      "r": 3,
+      "terrain": "forest",
+      "settlement": 60,
+      "roads": ["NE", "SE"],
+      "rivers": []
+    },
+    {
+      "q": 1,
+      "r": 3,
+      "terrain": "coast",
+      "settlement": 80,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 2,
+      "r": 3,
+      "terrain": "hills",
+      "settlement": 40,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 3,
+      "r": 3,
+      "terrain": "forest",
+      "settlement": 40,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 0,
+      "r": 4,
+      "terrain": "forest",
+      "settlement": 60,
+      "roads": ["NW", "E"],
+      "rivers": []
+    },
+    {
+      "q": 1,
+      "r": 4,
+      "terrain": "hills",
+      "settlement": 20,
+      "roads": ["W", "E"],
+      "rivers": []
+    },
+    {
+      "q": 2,
+      "r": 4,
+      "terrain": "hills",
+      "settlement": 40,
+      "roads": ["W", "E"],
+      "rivers": []
+    },
+    {
+      "q": 3,
+      "r": 4,
+      "terrain": "forest",
+      "settlement": 100,
+      "roads": ["W"],
+      "rivers": [],
+      "stronghold": {
+        "name": "Secret Town",
+        "type": "town",
+        "garrison": 500,
+        "threshold": 10,
+        "controlled_by": null
+      }
+    },
+    {
       "q": -1,
       "r": 0,
       "terrain": "sea",
@@ -153,8 +263,32 @@
       "rivers": []
     },
     {
+      "q": -1,
+      "r": 3,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": -1,
+      "r": 4,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": -1,
+      "r": 5,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
       "q": 0,
-      "r": 2,
+      "r": 5,
       "terrain": "sea",
       "settlement": 0,
       "roads": [],
@@ -162,7 +296,7 @@
     },
     {
       "q": 1,
-      "r": 2,
+      "r": 5,
       "terrain": "sea",
       "settlement": 0,
       "roads": [],
@@ -170,7 +304,7 @@
     },
     {
       "q": 2,
-      "r": 2,
+      "r": 5,
       "terrain": "sea",
       "settlement": 0,
       "roads": [],
@@ -178,7 +312,7 @@
     },
     {
       "q": 3,
-      "r": 2,
+      "r": 5,
       "terrain": "sea",
       "settlement": 0,
       "roads": [],
@@ -195,6 +329,30 @@
     {
       "q": 4,
       "r": 1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 4,
+      "r": 2,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 4,
+      "r": 3,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 4,
+      "r": 4,
       "terrain": "sea",
       "settlement": 0,
       "roads": [],

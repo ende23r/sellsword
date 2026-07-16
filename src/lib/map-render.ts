@@ -57,7 +57,6 @@ const RIVER_EDGE_CORNERS: Record<string, [number, number]> = {
 const STRONGHOLD_SYMBOL: Record<string, string> = {
   city: '⬛',
   town: '▪',
-  fortress: '⬢',
 };
 
 export function getPlayerMapHexes(
@@ -184,6 +183,13 @@ export async function renderMap(
           `<rect x="${(cx - r).toFixed(1)}" y="${(pcy - r).toFixed(1)}" width="${(r * 2).toFixed(1)}" height="${(r * 2).toFixed(1)}" fill="#1a1a1a" stroke="#fff" stroke-width="1.5"/>`,
           nameLine,
         );
+      } else if (stronghold.type === 'fortress') {
+        const r = size * 0.28;
+        const pcy = cy - size * 0.1;
+        labels.push(
+          `<polygon points="${trianglePoints(cx, pcy, r)}" fill="#1a1a1a" stroke="#fff" stroke-width="1.5"/>`,
+          nameLine,
+        );
       } else {
         const symbol = STRONGHOLD_SYMBOL[stronghold.type] ?? '?';
         labels.push(
@@ -229,6 +235,14 @@ export async function renderMap(
 function pentagonPoints(cx: number, cy: number, r: number): string {
   return Array.from({ length: 5 }, (_, i) => {
     const angle = (Math.PI / 180) * (-90 + i * 72);
+    return `${(cx + r * Math.cos(angle)).toFixed(1)},${(cy + r * Math.sin(angle)).toFixed(1)}`;
+  }).join(' ');
+}
+
+// North-pointing equilateral triangle: first vertex at -90° (top), then every 120°
+export function trianglePoints(cx: number, cy: number, r: number): string {
+  return Array.from({ length: 3 }, (_, i) => {
+    const angle = (Math.PI / 180) * (-90 + i * 120);
     return `${(cx + r * Math.cos(angle)).toFixed(1)},${(cy + r * Math.sin(angle)).toFixed(1)}`;
   }).join(' ');
 }
