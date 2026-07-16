@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId, getHex, type HexRow } from '../lib/db.js';
 import { hexesInRange } from '../lib/hex.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
@@ -12,13 +12,13 @@ const forage: Command = {
   async execute(interaction) {
     const army = getArmyByDiscordId(interaction.user.id);
     if (!army) {
-      await interaction.reply({ content: 'You have no army.', ephemeral: true });
+      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
       return;
     }
 
     const currentHex = getHex(army.hex_q, army.hex_r);
     if (!currentHex) {
-      await interaction.reply({ content: 'Your army is on an unknown hex.', ephemeral: true });
+      await interaction.reply({ content: 'Your army is on an unknown hex.', flags: MessageFlags.Ephemeral });
       return;
     }
 

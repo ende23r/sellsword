@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { removeFromQueue } from '../lib/queue-ops.js';
@@ -22,7 +22,7 @@ const unqueue: Command = {
     if (targetUser && !isAdmin) {
       await interaction.reply({
         content: 'Only admins can remove other players from the queue.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -33,7 +33,7 @@ const unqueue: Command = {
     if (!entry) {
       await interaction.reply({
         content: `${user.id === interaction.user.id ? 'You are' : `${user.displayName} is`} not in the queue.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

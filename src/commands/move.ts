@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId, getHex } from '../lib/db.js';
 import type { Command } from '../types.js';
 
@@ -22,7 +22,7 @@ const move: Command = {
   async execute(interaction) {
     const army = getArmyByDiscordId(interaction.user.id);
     if (!army) {
-      await interaction.reply({ content: 'You have no army.', ephemeral: true });
+      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -34,7 +34,7 @@ const move: Command = {
     if (!destHex) {
       await interaction.reply({
         content: `Hex (${destQ},${destR}) does not exist on the map.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -53,7 +53,7 @@ const move: Command = {
       await interaction.reply({
         content:
           '⚠️ Armies with wagons cannot travel off-road. Use `roads_only: true` or detach your wagons first.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

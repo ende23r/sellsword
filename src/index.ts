@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
+import { Client, Collection, Events, GatewayIntentBits, MessageFlags } from 'discord.js';
 import { readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -38,7 +38,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (PAUSED && !command.allowInPause) {
     await interaction.reply({
       content: '⏸ The game is currently paused. Orders and updates are suspended.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -47,7 +47,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await command.execute(interaction);
   } catch (error) {
     console.error(error);
-    const reply = { content: 'Something went wrong.', ephemeral: true };
+    const reply = { content: 'Something went wrong.', flags: MessageFlags.Ephemeral } as const;
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(reply);
     } else {

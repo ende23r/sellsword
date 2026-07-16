@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
 import type { Command } from '../types.js';
 
@@ -17,7 +17,7 @@ const listArmies: Command = {
     ).all() as { id: number; name: string; hex_q: number; hex_r: number; discord_user_id: string }[];
 
     if (rows.length === 0) {
-      await interaction.reply({ content: 'No armies in play.', ephemeral: true });
+      await interaction.reply({ content: 'No armies in play.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -26,7 +26,7 @@ const listArmies: Command = {
     );
     await interaction.reply({
       content: `**Armies in play (${rows.length})**\n${lines.join('\n')}`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   },
 };

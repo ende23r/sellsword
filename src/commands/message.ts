@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
 import { computeDeliveryTick, hexDistance } from '../lib/hex.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
@@ -24,13 +24,13 @@ const message: Command = {
     const senderArmy = getArmyByDiscordId(interaction.user.id);
     const senderCommander = getCommanderByDiscordId(interaction.user.id);
     if (!senderArmy || !senderCommander) {
-      await interaction.reply({ content: 'You have no army.', ephemeral: true });
+      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
       return;
     }
 
     const recipientUser = interaction.options.getUser('recipient', true);
     if (recipientUser.id === interaction.user.id) {
-      await interaction.reply({ content: 'You cannot message yourself.', ephemeral: true });
+      await interaction.reply({ content: 'You cannot message yourself.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -39,7 +39,7 @@ const message: Command = {
     if (!recipientArmy || !recipientCommander) {
       await interaction.reply({
         content: `${recipientUser.displayName} has no army.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

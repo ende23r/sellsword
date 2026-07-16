@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId } from '../lib/db.js';
 import type { Command } from '../types.js';
 
@@ -20,7 +20,7 @@ const stance: Command = {
   async execute(interaction) {
     const army = getArmyByDiscordId(interaction.user.id);
     if (!army) {
-      await interaction.reply({ content: 'You have no army.', ephemeral: true });
+      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
       return;
     }
 

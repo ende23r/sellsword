@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { appendToQueue } from '../lib/sheets.js';
@@ -21,7 +21,7 @@ const queue: Command = {
     if (targetUser && !isAdmin) {
       await interaction.reply({
         content: 'Only admins can queue other players.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -32,7 +32,7 @@ const queue: Command = {
     if (inGame) {
       await interaction.reply({
         content: `${user.id === interaction.user.id ? 'You are' : `${user.displayName} is`} already in the game.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -42,7 +42,7 @@ const queue: Command = {
     if (existing) {
       await interaction.reply({
         content: `${user.id === interaction.user.id ? 'You are' : `${user.displayName} is`} already in the queue.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

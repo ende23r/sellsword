@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId } from '../lib/db.js';
 import type { Command } from '../types.js';
 
@@ -29,13 +29,13 @@ const transfer: Command = {
   async execute(interaction) {
     const sender = getArmyByDiscordId(interaction.user.id);
     if (!sender) {
-      await interaction.reply({ content: 'You have no army.', ephemeral: true });
+      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
       return;
     }
 
     const recipientUser = interaction.options.getUser('recipient', true);
     if (recipientUser.id === interaction.user.id) {
-      await interaction.reply({ content: 'You cannot transfer to yourself.', ephemeral: true });
+      await interaction.reply({ content: 'You cannot transfer to yourself.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -43,7 +43,7 @@ const transfer: Command = {
     if (!recipient) {
       await interaction.reply({
         content: `${recipientUser.displayName} does not have an army.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -51,7 +51,7 @@ const transfer: Command = {
     if (sender.hex_q !== recipient.hex_q || sender.hex_r !== recipient.hex_r) {
       await interaction.reply({
         content: `Your army is at (${sender.hex_q},${sender.hex_r}) and theirs is at (${recipient.hex_q},${recipient.hex_r}). Armies must be in the same hex to transfer.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -62,7 +62,7 @@ const transfer: Command = {
     if (sender[resource] < amount) {
       await interaction.reply({
         content: `You only have ${sender[resource].toLocaleString()} ${resource} — cannot transfer ${amount.toLocaleString()}.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
