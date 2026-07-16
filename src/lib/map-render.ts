@@ -184,7 +184,7 @@ export async function renderMap(
           nameLine,
         );
       } else if (stronghold.type === 'fortress') {
-        const r = size * 0.28;
+        const r = size * 0.187;
         const pcy = cy - size * 0.1;
         labels.push(
           `<polygon points="${trianglePoints(cx, pcy, r)}" fill="#1a1a1a" stroke="#fff" stroke-width="1.5"/>`,
