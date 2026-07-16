@@ -1,8 +1,7 @@
 import { AttachmentBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { getAllHexes, getAllStrongholds, getArmyByDiscordId } from '../lib/db.js';
 import db from '../lib/db.js';
-import { hexesInRange } from '../lib/hex.js';
-import { getArmiesForMap, renderMap } from '../lib/map-render.js';
+import { getArmiesForMap, getPlayerMapHexes, renderMap } from '../lib/map-render.js';
 import type { Command } from '../types.js';
 
 const map: Command = {
@@ -30,6 +29,7 @@ const map: Command = {
     const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false;
     const fullMap = isAdmin && (interaction.options.getBoolean('full') ?? false);
 
+    let renderHexes = hexes;
     let visibleCoords: Set<string> | undefined;
 
     if (!fullMap) {
@@ -41,13 +41,16 @@ const map: Command = {
         return;
       }
 
-      // Scouting range: 1 hex normally, 2 hexes with cavalry
+      // Scouting range: 1 hex normally, 2 hexes with cavalry; fog border adds 1 more ring
       const scoutRange = army.cavalry > 0 ? 2 : 1;
-      const visibleHexes = hexesInRange({ q: army.hex_q, r: army.hex_r }, scoutRange);
-      visibleCoords = new Set(visibleHexes.map((h) => `${h.q},${h.r}`));
+      ({ hexes: renderHexes, visibleCoords } = getPlayerMapHexes(
+        hexes,
+        { q: army.hex_q, r: army.hex_r },
+        scoutRange,
+      ));
     }
 
-    const png = await renderMap(hexes, strongholds, {
+    const png = await renderMap(renderHexes, strongholds, {
       visibleCoords,
       armyPositions: armies,
     });

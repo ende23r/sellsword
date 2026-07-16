@@ -1,0 +1,204 @@
+{
+  "_comment": "Copy this file to map-seed.json and fill in your hex data. Run: npm run seed",
+  "meta": {
+    "name": "Campaign Map",
+    "hex_size_miles": 6
+  },
+  "hexes": [
+    {
+      "q": 0,
+      "r": 0,
+      "terrain": "city",
+      "_comment_terrain": "flatland | hills | forest | mountains | marsh | coast | sea",
+      "settlement": 300,
+      "roads": ["E", "SE"],
+      "_comment_roads": "Directions with road connections: NW | NE | E | SE | SW | W",
+      "rivers": [],
+      "_comment_rivers": "Same direction format as roads; indicates river on that hex edge",
+      "stronghold": {
+        "name": "Tutorial City",
+        "type": "city",
+        "_comment_type": "city | town | fortress",
+        "garrison": 1000,
+        "threshold": 15,
+        "controlled_by": null,
+        "_comment_controlled_by": "Discord faction role ID, or null if uncontrolled"
+      }
+    },
+    {
+      "q": 1,
+      "r": 0,
+      "terrain": "flatland",
+      "settlement": 50,
+      "roads": ["E", "W"],
+      "rivers": []
+    },
+    {
+      "q": 2,
+      "r": 0,
+      "terrain": "flatland",
+      "settlement": 30,
+      "roads": ["E", "W"],
+      "rivers": []
+    },
+    {
+      "q": 3,
+      "r": 0,
+      "terrain": "flatland",
+      "settlement": 10,
+      "roads": ["E", "W"],
+      "rivers": []
+    },
+    {
+      "q": 0,
+      "r": 1,
+      "terrain": "flatland",
+      "settlement": 60,
+      "roads": ["NW", "E"],
+      "rivers": [],
+      "stronghold": {
+        "name": "Tutorial Town",
+        "type": "town",
+        "garrison": 500,
+        "threshold": 10,
+        "controlled_by": null
+      }
+    },
+    {
+      "q": 1,
+      "r": 1,
+      "terrain": "hills",
+      "settlement": 40,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 2,
+      "r": 1,
+      "terrain": "hills",
+      "settlement": 40,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 3,
+      "r": 1,
+      "terrain": "forest",
+      "settlement": 40,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": -1,
+      "r": 0,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 0,
+      "r": -1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 1,
+      "r": -1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 2,
+      "r": -1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 3,
+      "r": -1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 4,
+      "r": -1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": -1,
+      "r": 1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": -1,
+      "r": 2,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 0,
+      "r": 2,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 1,
+      "r": 2,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 2,
+      "r": 2,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 3,
+      "r": 2,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 4,
+      "r": 0,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": 4,
+      "r": 1,
+      "terrain": "sea",
+      "settlement": 0,
+      "roads": [],
+      "rivers": []
+    }
+  ]
+}

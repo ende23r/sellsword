@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
 import { Resvg } from '@resvg/resvg-js';
 import type { HexRow, StrongholdRow } from './db.js';
-import { hexCorners, hexToPixel } from './hex.js';
+import { hexCorners, hexesInRange, hexToPixel } from './hex.js';
+import type { HexCoord } from './hex.js';
 
 export type ArmyMarker = {
   hex_q: number;
@@ -58,6 +59,17 @@ const STRONGHOLD_SYMBOL: Record<string, string> = {
   town: '▪',
   fortress: '⬢',
 };
+
+export function getPlayerMapHexes(
+  allHexes: HexRow[],
+  center: HexCoord,
+  scoutRange: number,
+): { hexes: HexRow[]; visibleCoords: Set<string> } {
+  const visibleCoords = new Set(hexesInRange(center, scoutRange).map((h) => `${h.q},${h.r}`));
+  const fogCoords = new Set(hexesInRange(center, scoutRange + 1).map((h) => `${h.q},${h.r}`));
+  const hexes = allHexes.filter((h) => fogCoords.has(`${h.q},${h.r}`));
+  return { hexes, visibleCoords };
+}
 
 type RenderOptions = {
   visibleCoords?: Set<string>; // 'q,r' strings; undefined = show all (admin view)

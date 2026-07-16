@@ -1,7 +1,12 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import { armyInitials, getArmiesForMap } from './map-render.js';
+import { armyInitials, getArmiesForMap, getPlayerMapHexes } from './map-render.js';
+import type { HexRow } from './db.js';
+
+function makeHex(q: number, r: number): HexRow {
+  return { id: q * 1000 + r, q, r, terrain: 'flatland', settlement: 0, roads: '[]', rivers: '[]', forage_count: 0, last_foraged: null };
+}
 
 describe('armyInitials', () => {
   it('takes first letter of alpha words and leading digits of numeric words', () => {
@@ -86,5 +91,53 @@ describe('getArmiesForMap', () => {
     const result = getArmiesForMap(db);
     expect(result).toHaveLength(1);
     expect(result[0].faction_color).toBeNull();
+  });
+});
+
+describe('getPlayerMapHexes', () => {
+  it('returns only hexes within scoutRange + 1 fog ring', () => {
+    // 37 hexes at range 3 from center; scoutRange=1 should give back range-2 = 19
+    const allHexes = Array.from({ length: 7 }, (_, i) => i - 3).flatMap((q) =>
+      Array.from({ length: 7 }, (_, j) => j - 3).map((r) => makeHex(q, r)),
+    );
+    const { hexes } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 1);
+    // range 2 has 1+6+12 = 19 hexes
+    expect(hexes.length).toBe(19);
+  });
+
+  it('excludes hexes beyond the fog ring', () => {
+    const allHexes = Array.from({ length: 7 }, (_, i) => i - 3).flatMap((q) =>
+      Array.from({ length: 7 }, (_, j) => j - 3).map((r) => makeHex(q, r)),
+    );
+    const { hexes } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 1);
+    expect(hexes.every((h: HexRow) => Math.abs(h.q) <= 2 && Math.abs(h.r) <= 2)).toBe(true);
+  });
+
+  it('visibleCoords contains exactly the hexes within scoutRange', () => {
+    const allHexes = Array.from({ length: 7 }, (_, i) => i - 3).flatMap((q) =>
+      Array.from({ length: 7 }, (_, j) => j - 3).map((r) => makeHex(q, r)),
+    );
+    const { visibleCoords } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 1);
+    // range 1 has 7 hexes
+    expect(visibleCoords.size).toBe(7);
+    expect(visibleCoords.has('0,0')).toBe(true);
+    expect(visibleCoords.has('1,0')).toBe(true);
+  });
+
+  it('fog ring hexes are in returned hexes but not in visibleCoords', () => {
+    const allHexes = Array.from({ length: 7 }, (_, i) => i - 3).flatMap((q) =>
+      Array.from({ length: 7 }, (_, j) => j - 3).map((r) => makeHex(q, r)),
+    );
+    const { hexes, visibleCoords } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 1);
+    const fogOnly = hexes.filter((h: HexRow) => !visibleCoords.has(`${h.q},${h.r}`));
+    expect(fogOnly.length).toBe(12); // ring 2 has 12 hexes
+  });
+
+  it('does not add phantom hexes that do not exist in allHexes', () => {
+    // Only 7 hexes in range 1; fog ring at range 2 doesn't exist in DB
+    const allHexes = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 },
+      { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 }].map(({ q, r }) => makeHex(q, r));
+    const { hexes } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 1);
+    expect(hexes.length).toBe(7); // fog ring hexes don't exist, so nothing added
   });
 });
