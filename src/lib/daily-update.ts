@@ -3,6 +3,7 @@ import db, { getAllArmies, type CommanderRow } from './db.js';
 import {
   consumeSupplies,
   deliverMessages,
+  postSupplyUpdates,
   processForage,
   processMovement,
   processNightMarchMovement,
@@ -18,6 +19,7 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
   if (phase === 'morning') {
     processNightMarchMovement(db, log);
     consumeSupplies(db, log);
+    await postSupplyUpdates(db, client, log);
   }
 
   if (phase === 'night') {

@@ -46,7 +46,7 @@
       "r": 0,
       "terrain": "flatland",
       "settlement": 10,
-      "roads": ["E", "W"],
+      "roads": ["W"],
       "rivers": []
     },
     {
@@ -178,7 +178,7 @@
     {
       "q": 2,
       "r": 4,
-      "terrain": "hills",
+      "terrain": "forest",
       "settlement": 40,
       "roads": ["W", "E"],
       "rivers": []

@@ -4,6 +4,8 @@ import { DB_SCHEMA } from './schema.js';
 import {
   consumeSupplies,
   deliverMessages,
+  formatDateUTC,
+  postSupplyUpdates,
   processForage,
   processMovement,
 } from './tick-processors.js';
@@ -394,5 +396,124 @@ describe('deliverMessages', () => {
     const msg = db.prepare('SELECT delivered FROM messages').get() as { delivered: number };
     expect(msg.delivered).toBe(1);
     expect(log.some((l) => l.includes('no army channel'))).toBe(true);
+  });
+});
+
+// ── formatDateUTC ─────────────────────────────────────────────────────────────
+
+describe('formatDateUTC', () => {
+  it('formats a date with day name, month, and day', () => {
+    expect(formatDateUTC(new Date('2026-07-16T00:00:00Z'))).toBe('Thursday, July 16th');
+  });
+
+  it('uses "st" for 1st, 21st, 31st', () => {
+    expect(formatDateUTC(new Date('2026-07-01T00:00:00Z'))).toContain('1st');
+    expect(formatDateUTC(new Date('2026-07-21T00:00:00Z'))).toContain('21st');
+    expect(formatDateUTC(new Date('2026-07-31T00:00:00Z'))).toContain('31st');
+  });
+
+  it('uses "nd" for 2nd and 22nd', () => {
+    expect(formatDateUTC(new Date('2026-07-02T00:00:00Z'))).toContain('2nd');
+    expect(formatDateUTC(new Date('2026-07-22T00:00:00Z'))).toContain('22nd');
+  });
+
+  it('uses "rd" for 3rd and 23rd', () => {
+    expect(formatDateUTC(new Date('2026-07-03T00:00:00Z'))).toContain('3rd');
+    expect(formatDateUTC(new Date('2026-07-23T00:00:00Z'))).toContain('23rd');
+  });
+
+  it('uses "th" for 11th, 12th, 13th (special cases)', () => {
+    expect(formatDateUTC(new Date('2026-07-11T00:00:00Z'))).toContain('11th');
+    expect(formatDateUTC(new Date('2026-07-12T00:00:00Z'))).toContain('12th');
+    expect(formatDateUTC(new Date('2026-07-13T00:00:00Z'))).toContain('13th');
+  });
+});
+
+// ── postSupplyUpdates ─────────────────────────────────────────────────────────
+
+describe('postSupplyUpdates', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+  });
+
+  function makeClient(send: ReturnType<typeof vi.fn>) {
+    return {
+      channels: { fetch: vi.fn().mockResolvedValue({ isTextBased: () => true, send }) },
+    };
+  }
+
+  it('posts a status message to the army channel', async () => {
+    const id = seedArmy(db, { name: 'Iron Legion', infantry: 1000, supplies: 5000 });
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+
+    expect(send).toHaveBeenCalledOnce();
+    const msg: string = send.mock.calls[0][0];
+    expect(msg).toContain('Iron Legion');
+    expect(msg).toContain('Supplies');
+    expect(msg).toContain('1,000/d');
+    expect(msg).toContain('Days 5');
+  });
+
+  it('skips armies with no discord_channel_id', async () => {
+    seedArmy(db, { infantry: 1000, supplies: 5000 });
+
+    const send = vi.fn();
+    await postSupplyUpdates(db, makeClient(send) as never, [], new Date());
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('includes a sheet link when army_sheet_url is set', async () => {
+    const id = seedArmy(db, { name: 'Riders', cavalry: 100, supplies: 10000 });
+    db.prepare('UPDATE commanders SET discord_channel_id = ?, army_sheet_url = ? WHERE id = ?')
+      .run('ch-2', 'https://docs.google.com/spreadsheets/d/abc', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+
+    const msg: string = send.mock.calls[0][0];
+    expect(msg).toContain('Open Sheet');
+    expect(msg).toContain('https://docs.google.com/spreadsheets/d/abc');
+  });
+
+  it('shows zero date when consumption > 0', async () => {
+    const id = seedArmy(db, { infantry: 1000, supplies: 3000 });
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-3', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+
+    const msg: string = send.mock.calls[0][0];
+    expect(msg).toContain('Zero Date');
+    expect(msg).toContain('July 19'); // 3000/1000 = 3 days out
+  });
+
+  it('omits zero date and shows ∞ when consumption is zero', async () => {
+    const id = seedArmy(db, { infantry: 0, cavalry: 0, supplies: 1000 });
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-4', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, makeClient(send) as never, [], new Date());
+
+    const msg: string = send.mock.calls[0][0];
+    expect(msg).toContain('∞');
+    expect(msg).not.toContain('Zero Date');
+  });
+
+  it('logs a warning when channel fetch fails', async () => {
+    const id = seedArmy(db, { infantry: 1000 });
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('bad-ch', id);
+
+    const log: string[] = [];
+    const badClient = {
+      channels: { fetch: vi.fn().mockRejectedValue(new Error('unknown channel')) },
+    };
+    await postSupplyUpdates(db, badClient as never, log, new Date());
+    expect(log.some((l) => l.includes('supply update'))).toBe(true);
   });
 });

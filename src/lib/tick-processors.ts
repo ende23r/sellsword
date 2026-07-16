@@ -207,6 +207,65 @@ export async function deliverMessages(
   }
 }
 
+// ── Supply status notifications (morning tick) ────────────────────────────────
+
+const UTC_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const UTC_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+
+export function formatDateUTC(date: Date): string {
+  const d = date.getUTCDate();
+  const suffix = (d === 1 || d === 21 || d === 31) ? 'st'
+    : (d === 2 || d === 22) ? 'nd'
+    : (d === 3 || d === 23) ? 'rd'
+    : 'th';
+  return `${UTC_DAYS[date.getUTCDay()]}, ${UTC_MONTHS[date.getUTCMonth()]} ${d}${suffix}`;
+}
+
+export async function postSupplyUpdates(
+  database: Database.Database,
+  client: Client,
+  log: Log,
+  now: Date = new Date(),
+): Promise<void> {
+  const rows = database
+    .prepare(
+      `SELECT a.*, c.discord_channel_id, c.army_sheet_url
+       FROM armies a
+       JOIN commanders c ON c.id = a.commander_id`,
+    )
+    .all() as (ArmyRow & { discord_channel_id: string | null; army_sheet_url: string | null })[];
+
+  for (const army of rows) {
+    if (!army.discord_channel_id) continue;
+
+    const consumption = army.infantry + army.noncombatants + (army.cavalry + army.wagons) * 10;
+    const daysLeft = consumption > 0 ? Math.floor(army.supplies / consumption) : null;
+    const sheetPart = army.army_sheet_url
+      ? ` • [Open Sheet](<${army.army_sheet_url}>)`
+      : '';
+
+    let msg =
+      `⚡ Status: ${army.name ?? 'Unknown'}\n` +
+      `📅 ${formatDateUTC(now)} UTC${sheetPart}\n` +
+      `📦 Supplies ${army.supplies.toLocaleString()} • 📉 Cons ${consumption.toLocaleString()}/d • ⏰ Days ${daysLeft ?? '∞'}`;
+
+    if (daysLeft !== null) {
+      const zeroDate = new Date(now.getTime() + daysLeft * 86400000);
+      msg += `\n🚨 Zero Date ${formatDateUTC(zeroDate)} UTC`;
+    }
+
+    try {
+      const ch = await client.channels.fetch(army.discord_channel_id);
+      if (ch?.isTextBased()) {
+        await (ch as TextChannel).send(msg);
+      }
+    } catch {
+      log.push(`⚠️ Failed to post supply update to channel ${army.discord_channel_id}.`);
+    }
+  }
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function buildValidCoords(database: Database.Database): Set<string> {
