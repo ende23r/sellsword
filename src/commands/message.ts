@@ -83,7 +83,6 @@ const message: Command = {
     const deliveryTs = Math.floor(new Date(deliverAt).getTime() / 1000);
     await interaction.reply({
       content: `✅ Message dispatched.\n**Recipient:** ${recipientUser}\n**Distance:** ${dist} hexes (${dist * 6} miles)\n**Estimated delivery:** <t:${deliveryTs}:f> (<t:${deliveryTs}:R>)`,
-      ephemeral: true,
     });
   },
 };

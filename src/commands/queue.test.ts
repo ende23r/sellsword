@@ -50,4 +50,15 @@ describe('/queue', () => {
     await command.execute(interaction as any);
     expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('✅'));
   });
+
+  it('rejects a player who is already in the game', async () => {
+    const db = (await import('../lib/db.js')).default as any;
+    db.prepare.mockReturnValue({ get: vi.fn().mockReturnValue({ id: 1 }) });
+    const { default: command } = await import('./queue.js');
+    const interaction = makeInteraction();
+    await command.execute(interaction as any);
+    expect(interaction.reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('already in the game') }),
+    );
+  });
 });

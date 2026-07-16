@@ -28,6 +28,15 @@ const queue: Command = {
 
     const user = targetUser ?? interaction.user;
 
+    const inGame = db.prepare('SELECT id FROM commanders WHERE discord_user_id = ?').get(user.id);
+    if (inGame) {
+      await interaction.reply({
+        content: `${user.id === interaction.user.id ? 'You are' : `${user.displayName} is`} already in the game.`,
+        ephemeral: true,
+      });
+      return;
+    }
+
     // Check for duplicate
     const existing = db.prepare('SELECT id FROM queue WHERE discord_user_id = ?').get(user.id);
     if (existing) {

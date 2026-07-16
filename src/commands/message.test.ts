@@ -73,4 +73,12 @@ describe('/message', () => {
       expect.objectContaining({ content: expect.stringContaining('✅') }),
     );
   });
+
+  it('sends the success reply non-ephemerally', async () => {
+    const { default: command } = await import('./message.js');
+    const interaction = makeInteraction();
+    await command.execute(interaction as any);
+    const replyArg = vi.mocked(interaction.reply).mock.calls[0][0] as any;
+    expect(replyArg.ephemeral).toBeFalsy();
+  });
 });

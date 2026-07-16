@@ -39,6 +39,16 @@ const move: Command = {
       return;
     }
 
+    if (destQ === army.hex_q && destR === army.hex_r) {
+      db.prepare(
+        "DELETE FROM orders WHERE army_id = ? AND type IN ('move', 'forage') AND processed_at IS NULL",
+      ).run(army.id);
+      await interaction.reply(
+        `🛑 That's your current position. Movement orders cancelled — army will hold at **(${army.hex_q},${army.hex_r})**.`,
+      );
+      return;
+    }
+
     if (!roadsOnly && army.wagons > 0) {
       await interaction.reply({
         content:
