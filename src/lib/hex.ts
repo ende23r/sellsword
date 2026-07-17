@@ -115,9 +115,10 @@ export function milesPerDay(onRoad: boolean, forcedMarch: boolean, nightMarch: b
 // Example: 2 hexes sent just before the 14:00 tick —
 //   last tick = 06:00, travel = 6 h, arrival = 12:00 → delivers at 14:00.
 
-export const MESSENGER_HOURS_PER_HEX = 3; // friendly/neutral territory
+export const MESSENGER_HOURS_PER_HEX = 3;         // friendly/neutral territory
+export const MESSENGER_HOURS_PER_HEX_HOSTILE = 4; // hostile territory
 
-const TICK_HOURS = [6, 14, 22]; // hours-of-day (local) when ticks fire
+const TICK_HOURS = [6, 14, 22]; // hours-of-day (local) when daily update ticks fire
 
 // UTC offset for `date` in `timezone`, in milliseconds.
 // Positive = local clock ahead of UTC (e.g. UTC+5:30 → +19800000).
@@ -169,8 +170,12 @@ export function nextTickAfter(t: Date, timezone: string): Date {
 }
 
 // The tick at which a message traveling `hexDist` hexes will be delivered.
-export function computeDeliveryTick(hexDist: number, now: Date, timezone: string): Date {
-  const start = lastTickBefore(now, timezone);
-  const arrival = new Date(start.getTime() + hexDist * MESSENGER_HOURS_PER_HEX * 3600000);
-  return nextTickAfter(arrival, timezone);
+// Messages are delivered on the hourly tick at or after the messenger's arrival.
+// hostile=true uses the slower hostile-territory speed (4 h/hex instead of 3).
+export function computeDeliveryTick(hexDist: number, now: Date, hostile = false): Date {
+  const hoursPerHex = hostile ? MESSENGER_HOURS_PER_HEX_HOSTILE : MESSENGER_HOURS_PER_HEX;
+  const travelHours = Math.round(hexDist * hoursPerHex);
+  const arrivalMs = now.getTime() + travelHours * 3600000;
+  const hourMs = 3600000;
+  return new Date(Math.ceil(arrivalMs / hourMs) * hourMs);
 }

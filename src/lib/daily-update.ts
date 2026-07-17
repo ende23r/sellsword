@@ -12,6 +12,12 @@ import { syncAllArmySheets } from './sheets.js';
 
 export type UpdatePhase = 'morning' | 'noon' | 'night';
 
+export async function runMessageDelivery(adminChannel: TextChannel): Promise<void> {
+  const log: string[] = [];
+  await deliverMessages(db, adminChannel.client, log);
+  if (log.length > 0) await adminChannel.send(log.join('\n'));
+}
+
 export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChannel): Promise<void> {
   const log: string[] = [`**Daily Update — ${phase.toUpperCase()}**`];
   const client = adminChannel.client;

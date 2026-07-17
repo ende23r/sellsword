@@ -44,37 +44,29 @@ describe('nextTickAfter', () => {
 });
 
 describe('computeDeliveryTick', () => {
-  // now = Jul 14 07:00Z → last tick = Jul 14 06:00Z
+  it('delivers at the exact arrival hour when arrival falls on a whole hour', () => {
+    // now=07:00Z, 2 hexes × 3h = 6h → arrives 13:00Z → delivers 13:00Z
+    expect(computeDeliveryTick(2, D('2026-07-14T07:00:00Z'))).toEqual(D('2026-07-14T13:00:00Z'));
+  });
 
-  it('2 hexes (6h travel) arrives at noon, delivers at 14:00 tick', () => {
-    expect(computeDeliveryTick(2, D('2026-07-14T07:00:00Z'), 'UTC')).toEqual(
-      D('2026-07-14T14:00:00Z'),
+  it('snaps up to the next whole hour when arrival is mid-hour', () => {
+    // now=07:30Z + 6h = 13:30Z → snaps to 14:00Z
+    expect(computeDeliveryTick(2, D('2026-07-14T07:30:00Z'))).toEqual(D('2026-07-14T14:00:00Z'));
+  });
+
+  it('uses 4 hours per hex for hostile territory', () => {
+    // 2 hexes × 4h = 8h, from 07:00Z → delivers 15:00Z
+    expect(computeDeliveryTick(2, D('2026-07-14T07:00:00Z'), true)).toEqual(
+      D('2026-07-14T15:00:00Z'),
     );
   });
 
-  it('5 hexes (15h travel) arrives at 21:00, delivers at 22:00 tick', () => {
-    expect(computeDeliveryTick(5, D('2026-07-14T07:00:00Z'), 'UTC')).toEqual(
-      D('2026-07-14T22:00:00Z'),
-    );
+  it('snaps to next hour for 0-hex distance when sent mid-hour', () => {
+    // 0h travel from 07:30Z → snaps to 08:00Z
+    expect(computeDeliveryTick(0, D('2026-07-14T07:30:00Z'))).toEqual(D('2026-07-14T08:00:00Z'));
   });
 
-  it('8 hexes (24h travel) arrives at 06:00 next day, delivers at 14:00 next day', () => {
-    expect(computeDeliveryTick(8, D('2026-07-14T07:00:00Z'), 'UTC')).toEqual(
-      D('2026-07-15T14:00:00Z'),
-    );
-  });
-
-  it('grants the last-tick grace: sending just before a tick is the same as just after', () => {
-    // 1 minute before 14:00 tick → last tick = 06:00 (same start as being 1 min after 06:00)
-    const beforeTick = computeDeliveryTick(2, D('2026-07-14T13:59:00Z'), 'UTC');
-    const afterTick = computeDeliveryTick(2, D('2026-07-14T07:00:00Z'), 'UTC');
-    expect(beforeTick).toEqual(afterTick);
-  });
-
-  it('sending exactly at a tick uses that tick as the start', () => {
-    // now = 06:00Z exactly → last tick = 06:00Z → same result as just after
-    expect(computeDeliveryTick(2, D('2026-07-14T06:00:00Z'), 'UTC')).toEqual(
-      D('2026-07-14T14:00:00Z'),
-    );
+  it('delivers at current hour for 0-hex distance sent on an exact hour', () => {
+    expect(computeDeliveryTick(0, D('2026-07-14T07:00:00Z'))).toEqual(D('2026-07-14T07:00:00Z'));
   });
 });
