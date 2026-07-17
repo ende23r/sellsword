@@ -73,18 +73,21 @@ export function processMovement(database: Database.Database, log: Log): void {
     const forced = Boolean(army.forced_march);
     const cavalryOnly = army.infantry === 0 && army.wagons === 0;
 
-    let milesPerDay: number;
-    if (forced && cavalryOnly) {
-      milesPerDay = 36;
-    } else if (forced) {
-      milesPerDay = 18;
-    } else if (onRoad) {
-      milesPerDay = 12;
-    } else {
-      milesPerDay = 6;
-    }
+    const currentHex = database
+      .prepare('SELECT speed FROM hexes WHERE q = ? AND r = ?')
+      .get(army.hex_q, army.hex_r) as { speed: number } | undefined;
+    const hexSpeed = currentHex?.speed ?? 6;
 
-    advanceArmy(database, army, order, Math.floor(milesPerDay / 6), validCoords, log);
+    let speedMultiplier: number;
+    if (forced && cavalryOnly) speedMultiplier = 6;
+    else if (forced) speedMultiplier = 3;
+    else if (onRoad) speedMultiplier = 2;
+    else speedMultiplier = 1;
+
+    const hexesAllowed = Math.floor((hexSpeed * speedMultiplier) / 6);
+    if (hexesAllowed === 0) continue;
+
+    advanceArmy(database, army, order, hexesAllowed, validCoords, log);
 
     if (forced) {
       const refreshed = database
@@ -288,7 +291,7 @@ export async function postSupplyUpdates(
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function buildValidCoords(database: Database.Database): Set<string> {
-  const hexes = database.prepare('SELECT q, r FROM hexes').all() as { q: number; r: number }[];
+  const hexes = database.prepare('SELECT q, r FROM hexes WHERE speed > 0').all() as { q: number; r: number }[];
   return new Set(hexes.map((h) => `${h.q},${h.r}`));
 }
 

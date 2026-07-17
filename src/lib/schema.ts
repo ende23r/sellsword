@@ -9,6 +9,7 @@ export const DB_SCHEMA = `
     rivers  TEXT NOT NULL DEFAULT '[]',
     forage_count  INTEGER NOT NULL DEFAULT 0,
     last_foraged  TEXT,
+    speed         INTEGER NOT NULL DEFAULT 6,
     UNIQUE(q, r)
   );
 

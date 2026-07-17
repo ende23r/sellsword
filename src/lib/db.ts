@@ -10,6 +10,14 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.exec(DB_SCHEMA);
 
+// Migration: add speed column to hexes if absent.
+{
+  const hexesCols = db.pragma('table_info(hexes)') as { name: string }[];
+  if (!hexesCols.some((c) => c.name === 'speed')) {
+    db.exec('ALTER TABLE hexes ADD COLUMN speed INTEGER NOT NULL DEFAULT 6');
+  }
+}
+
 // Migrations for factions table.
 const factionsCols = db.pragma('table_info(factions)') as { name: string; notnull: number }[];
 const factionsColNames = new Set(factionsCols.map((c) => c.name));
@@ -46,6 +54,7 @@ export type HexRow = {
   rivers: string;
   forage_count: number;
   last_foraged: string | null;
+  speed: number;
 };
 
 export type StrongholdRow = {

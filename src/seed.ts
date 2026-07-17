@@ -35,6 +35,7 @@ type HexSeed = {
   settlement: number;
   roads: string[];
   rivers: string[];
+  speed?: number;
   stronghold?: StrongholdSeed;
 };
 
@@ -55,14 +56,17 @@ try {
 
 const seed: SeedFile = JSON.parse(raw);
 
+const IMPASSABLE_TERRAIN = new Set(['sea', 'coast']);
+
 const insertHex = db.prepare(`
-  INSERT INTO hexes (q, r, terrain, settlement, roads, rivers)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO hexes (q, r, terrain, settlement, roads, rivers, speed)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(q, r) DO UPDATE SET
     terrain = excluded.terrain,
     settlement = excluded.settlement,
     roads = excluded.roads,
-    rivers = excluded.rivers
+    rivers = excluded.rivers,
+    speed = excluded.speed
 `);
 
 const insertStronghold = db.prepare(`
@@ -76,6 +80,7 @@ const runSeed = db.transaction(() => {
   let strongholdCount = 0;
 
   for (const hex of seed.hexes) {
+    const hexSpeed = hex.speed ?? (IMPASSABLE_TERRAIN.has(hex.terrain) ? 0 : 6);
     insertHex.run(
       hex.q,
       hex.r,
@@ -83,6 +88,7 @@ const runSeed = db.transaction(() => {
       hex.settlement,
       JSON.stringify(hex.roads ?? []),
       JSON.stringify(hex.rivers ?? []),
+      hexSpeed,
     );
 
     if (hex.stronghold) {

@@ -5,7 +5,7 @@ import { armyInitials, armyRingOffsets, getArmiesForMap, getPlayerMapHexes, tria
 import type { HexRow } from './db.js';
 
 function makeHex(q: number, r: number): HexRow {
-  return { id: q * 1000 + r, q, r, terrain: 'flatland', settlement: 0, roads: '[]', rivers: '[]', forage_count: 0, last_foraged: null };
+  return { id: q * 1000 + r, q, r, terrain: 'flatland', settlement: 0, roads: '[]', rivers: '[]', forage_count: 0, last_foraged: null, speed: 6 };
 }
 
 describe('armyInitials', () => {

@@ -69,10 +69,10 @@ function seedHex(
   db: Database.Database,
   q: number,
   r: number,
-  overrides: { settlement?: number; forage_count?: number; terrain?: string } = {},
+  overrides: { settlement?: number; forage_count?: number; terrain?: string; speed?: number } = {},
 ): void {
   db.prepare(
-    'INSERT OR IGNORE INTO hexes (q, r, terrain, settlement, roads, rivers, forage_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT OR IGNORE INTO hexes (q, r, terrain, settlement, roads, rivers, forage_count, speed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(
     q,
     r,
@@ -81,6 +81,7 @@ function seedHex(
     '[]',
     '[]',
     overrides.forage_count ?? 0,
+    overrides.speed ?? 6,
   );
 }
 
@@ -328,6 +329,36 @@ describe('processMovement', () => {
       hex_r: number;
     };
     expect(army.hex_r).toBe(2); // 2 hexes on road
+  });
+
+  it('cannot path through a speed=0 hex', () => {
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    seedHex(db, 0, 0);                    // passable
+    seedHex(db, 0, 1, { speed: 0 });      // impassable — only route to (0,2)
+    seedHex(db, 0, 2);                    // passable but unreachable
+    seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
+
+    const log: string[] = [];
+    processMovement(db, log);
+
+    const army = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(armyId) as { hex_q: number; hex_r: number };
+    expect(army.hex_q).toBe(0);
+    expect(army.hex_r).toBe(0);
+    expect(log.some((l) => l.includes('no valid path'))).toBe(true);
+  });
+
+  it('off-road movement distance is determined by current hex speed', () => {
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    seedHex(db, 0, 0, { speed: 12 }); // double speed — should move 2 hexes off-road
+    seedHex(db, 0, 1, { speed: 12 });
+    seedHex(db, 0, 2, { speed: 12 });
+    seedHex(db, 0, 3, { speed: 12 });
+    seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 3, roads_only: false });
+
+    processMovement(db, []);
+
+    const army = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(armyId) as { hex_r: number };
+    expect(army.hex_r).toBe(2);
   });
 
   it('cancels order and logs warning when no valid path exists', () => {
