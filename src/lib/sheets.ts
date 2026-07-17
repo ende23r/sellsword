@@ -132,6 +132,10 @@ const ARMY_SHEET_CELLS = {
   GOODS: 'Stats!B10',
   HEX: 'Stats!B11',
   STANCE: 'Stats!B12',
+  // Sheet-calculated; bot reads these in, does not write them.
+  INFANTRY_STRENGTH: 'Stats!B13',
+  CAVALRY_STRENGTH: 'Stats!B14',
+  SCOUTING_RANGE: 'Stats!B15',
 };
 
 export async function syncArmySheet(sheetId: string, army: ArmyRow): Promise<void> {

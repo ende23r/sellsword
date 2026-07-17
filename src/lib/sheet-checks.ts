@@ -15,7 +15,7 @@ export const MESSAGES_TAB_HEADERS = [
   'Deliver At',
 ];
 
-// These must match the row order in ARMY_SHEET_CELLS in sheets.ts (rows 2–12, column A labels)
+// These must match the row order in ARMY_SHEET_CELLS in sheets.ts (rows 2–15, column A labels)
 export const STATS_TAB_ROW_LABELS = [
   'Infantry',
   'Cavalry',
@@ -28,6 +28,9 @@ export const STATS_TAB_ROW_LABELS = [
   'Goods',
   'Hex',
   'Stance',
+  'Infantry Strength',
+  'Cavalry Strength',
+  'Scouting Range',
 ];
 
 export async function checkQueueTab(
@@ -134,7 +137,7 @@ export async function checkStatsTab(
 
   const labelRes = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
-    range: 'Stats!A2:A12',
+    range: 'Stats!A2:A15',
   });
 
   const rows = labelRes.data.values ?? [];
