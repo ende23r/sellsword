@@ -27,8 +27,8 @@ export type BattleOutcome = {
   hexR: number;
 };
 
-export function effectiveStrength(army: Pick<ArmyRow, 'infantry' | 'cavalry' | 'noncombatants'>): number {
-  return army.infantry + army.noncombatants + army.cavalry * 2;
+export function effectiveStrength(army: Pick<ArmyRow, 'infantry_strength' | 'cavalry_strength' | 'noncombatants'>): number {
+  return army.infantry_strength + army.noncombatants + army.cavalry_strength;
 }
 
 export function numericalAdvantage(stronger: number, weaker: number): number {

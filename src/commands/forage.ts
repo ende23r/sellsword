@@ -21,8 +21,7 @@ const forage: Command = {
       return;
     }
 
-    // Cavalry extends the forage radius to 2 hexes (same as processForage in tick-processors)
-    const range = army.cavalry > 0 ? 2 : 1;
+    const range = army.scouting_range ?? 1;
     const coords = hexesInRange({ q: army.hex_q, r: army.hex_r }, range);
 
     let totalYield = 0;
@@ -49,7 +48,7 @@ const forage: Command = {
       army.id,
     );
 
-    const rangeLabel = range === 2 ? `2-hex cavalry range (${coords.length} hexes)` : `1-hex range (${coords.length} hexes)`;
+    const rangeLabel = range > 1 ? `${range}-hex scouting range (${coords.length} hexes)` : `1-hex range (${coords.length} hexes)`;
     const msg =
       `✅ Forage order queued for the next night update.\n` +
       `**Area:** ${rangeLabel} around (${army.hex_q},${army.hex_r})\n` +

@@ -19,8 +19,11 @@ function seedArmy(
     hex_q?: number;
     hex_r?: number;
     infantry?: number;
+    infantry_strength?: number;
     cavalry?: number;
+    cavalry_strength?: number;
     noncombatants?: number;
+    scouting_range?: number;
     morale?: number;
     max_morale?: number;
     supplies?: number;
@@ -29,16 +32,19 @@ function seedArmy(
   const id = overrides.id ?? ++seq;
   db.prepare('INSERT INTO commanders (id, discord_user_id) VALUES (?, ?)').run(id, `user-${id}`);
   db.prepare(
-    `INSERT INTO armies (id, commander_id, hex_q, hex_r, infantry, cavalry, noncombatants, morale, max_morale, supplies)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO armies (id, commander_id, hex_q, hex_r, infantry, infantry_strength, cavalry, cavalry_strength, noncombatants, scouting_range, morale, max_morale, supplies)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     id,
     overrides.hex_q ?? 0,
     overrides.hex_r ?? 0,
     overrides.infantry ?? 1000,
+    overrides.infantry_strength ?? 0,
     overrides.cavalry ?? 0,
+    overrides.cavalry_strength ?? 0,
     overrides.noncombatants ?? 0,
+    overrides.scouting_range ?? 1,
     overrides.morale ?? 9,
     overrides.max_morale ?? 12,
     overrides.supplies ?? 10000,
@@ -54,12 +60,12 @@ function seqRng(...vals: number[]): () => number {
 }
 
 describe('effectiveStrength', () => {
-  it('counts infantry + noncombatants + cavalry × 2', () => {
-    expect(effectiveStrength({ infantry: 1000, cavalry: 200, noncombatants: 300, wagons: 0 } as any)).toBe(1700);
+  it('sums infantry_strength + noncombatants + cavalry_strength', () => {
+    expect(effectiveStrength({ infantry_strength: 1000, cavalry_strength: 400, noncombatants: 300 } as any)).toBe(1700);
   });
 
-  it('excludes wagons', () => {
-    expect(effectiveStrength({ infantry: 1000, cavalry: 0, noncombatants: 0, wagons: 100 } as any)).toBe(1000);
+  it('excludes raw counts and wagons', () => {
+    expect(effectiveStrength({ infantry_strength: 0, cavalry_strength: 0, noncombatants: 0 } as any)).toBe(0);
   });
 });
 
@@ -230,12 +236,21 @@ describe('resolveBattle', () => {
     expect(result.sideB.modifier).toBe(0);
   });
 
-  it('numerical advantage gives +N modifier to larger side', () => {
-    // A: 2000 infantry (effective 2000), B: 1000 infantry → 2× → +3
-    const a = seedArmy(db, { infantry: 2000 });
-    const b = seedArmy(db, { infantry: 1000 });
+  it('numerical advantage uses infantry_strength and cavalry_strength', () => {
+    // A: infantry_strength 2000, B: infantry_strength 1000 → 2× → +3
+    const a = seedArmy(db, { infantry_strength: 2000 });
+    const b = seedArmy(db, { infantry_strength: 1000 });
     const result = resolveBattle(db, a, b, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.sideA.modifier).toBe(3);
+    expect(result.sideB.modifier).toBe(0);
+  });
+
+  it('cavalry_strength contributes to effective strength', () => {
+    // A: cavalry_strength 600 (total effective 600), B: infantry_strength 200 (total 200) → 3× → +4
+    const a = seedArmy(db, { cavalry_strength: 600 });
+    const b = seedArmy(db, { infantry_strength: 200 });
+    const result = resolveBattle(db, a, b, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
+    expect(result.sideA.modifier).toBe(4);
     expect(result.sideB.modifier).toBe(0);
   });
 
@@ -256,10 +271,10 @@ describe('resolveBattle', () => {
   });
 
   it('impossible battle: extra 10% casualties and no victor morale gain', () => {
-    // A: 2000 inf, morale 12; B: 100 inf, morale 1, supplies 0
-    // modA = numAdv(2000,100)=7 + moraleAdv(12-1)=11 = 18; modB = -1 → netDiff=19 ≥ 11
-    const a = seedArmy(db, { infantry: 2000, morale: 12, max_morale: 12, supplies: 1000 });
-    const b = seedArmy(db, { infantry: 100, morale: 1, supplies: 0 });
+    // A: infantry_strength 2000, morale 12; B: infantry_strength 100, morale 1, supplies 0
+    // modA = numAdv(2000,100)=7 + moraleAdv(11)=11 = 18; modB = -1 → netDiff=19 ≥ 11
+    const a = seedArmy(db, { infantry_strength: 2000, morale: 12, max_morale: 12, supplies: 1000 });
+    const b = seedArmy(db, { infantry_strength: 100, morale: 1, supplies: 0 });
     const result = resolveBattle(db, a, b, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.impossible).toBe(true);
     expect(result.victorMoraleDelta).toBe(0);

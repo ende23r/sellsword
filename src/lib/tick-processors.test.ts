@@ -31,6 +31,7 @@ function seedArmy(
     cavalry?: number;
     wagons?: number;
     noncombatants?: number;
+    scouting_range?: number;
     morale?: number;
     supplies?: number;
     forced_march?: number;
@@ -45,8 +46,8 @@ function seedArmy(
   db.prepare(
     `INSERT INTO armies
       (id, commander_id, name, hex_q, hex_r, infantry, cavalry, wagons,
-       noncombatants, morale, supplies, forced_march, night_march)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       noncombatants, scouting_range, morale, supplies, forced_march, night_march)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     id,
@@ -57,6 +58,7 @@ function seedArmy(
     overrides.cavalry ?? 0,
     overrides.wagons ?? 0,
     overrides.noncombatants ?? 0,
+    overrides.scouting_range ?? 1,
     overrides.morale ?? 9,
     overrides.supplies ?? 10000,
     overrides.forced_march ?? 0,
@@ -205,11 +207,11 @@ describe('processForage', () => {
     expect(army.supplies).toBe(0);
   });
 
-  it('extends range to 2 hexes for cavalry armies', () => {
+  it('extends range to 2 hexes when scouting_range is 2', () => {
     const armyId = seedArmy(db, {
       hex_q: 0,
       hex_r: 0,
-      cavalry: 200,
+      scouting_range: 2,
       infantry: 0,
       supplies: 0,
     });

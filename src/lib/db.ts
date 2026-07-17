@@ -18,6 +18,18 @@ db.exec(DB_SCHEMA);
   }
 }
 
+// Migration: add infantry_strength, cavalry_strength, scouting_range to armies if absent.
+{
+  const armiesCols = db.pragma('table_info(armies)') as { name: string }[];
+  const names = new Set(armiesCols.map((c) => c.name));
+  if (!names.has('infantry_strength'))
+    db.exec('ALTER TABLE armies ADD COLUMN infantry_strength INTEGER NOT NULL DEFAULT 0');
+  if (!names.has('cavalry_strength'))
+    db.exec('ALTER TABLE armies ADD COLUMN cavalry_strength INTEGER NOT NULL DEFAULT 0');
+  if (!names.has('scouting_range'))
+    db.exec('ALTER TABLE armies ADD COLUMN scouting_range INTEGER NOT NULL DEFAULT 1');
+}
+
 // Migrations for factions table.
 const factionsCols = db.pragma('table_info(factions)') as { name: string; notnull: number }[];
 const factionsColNames = new Set(factionsCols.map((c) => c.name));
@@ -83,9 +95,12 @@ export type ArmyRow = {
   hex_q: number;
   hex_r: number;
   infantry: number;
+  infantry_strength: number;
   cavalry: number;
+  cavalry_strength: number;
   wagons: number;
   noncombatants: number;
+  scouting_range: number;
   morale: number;
   resting_morale: number;
   max_morale: number;

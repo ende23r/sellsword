@@ -120,7 +120,7 @@ export function processForage(
       .get(order.army_id) as ArmyRow | undefined;
     if (!army) continue;
 
-    const range = army.cavalry > 0 ? 2 : 1;
+    const range = army.scouting_range ?? 1;
     const hexCoords = hexesInRange({ q: army.hex_q, r: army.hex_r }, range);
 
     let totalYield = 0;
@@ -152,7 +152,7 @@ export function processForage(
         .run(totalYield, army.id);
       log.push(
         `🌾 **${army.name ?? army.id}** foraged ${totalYield.toLocaleString()} supplies` +
-          (range === 2 ? ' (cavalry range, 2 hexes)' : '') +
+          (range > 1 ? ` (scouting range ${range} hexes)` : '') +
           `.`,
       );
     } else {
