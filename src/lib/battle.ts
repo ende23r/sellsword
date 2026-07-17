@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { ArmyRow } from './db.js';
+import type { ArmySheetStats } from './sheets.js';
 
 export type SideResult = {
   armyId: number;
@@ -27,8 +28,10 @@ export type BattleOutcome = {
   hexR: number;
 };
 
-export function effectiveStrength(army: Pick<ArmyRow, 'infantry_strength' | 'cavalry_strength' | 'noncombatants'>): number {
-  return army.infantry_strength + army.noncombatants + army.cavalry_strength;
+export function effectiveStrength(
+  stats: Pick<ArmySheetStats, 'infantry_strength' | 'cavalry_strength' | 'noncombatants'>,
+): number {
+  return stats.infantry_strength + stats.noncombatants + stats.cavalry_strength;
 }
 
 export function numericalAdvantage(stronger: number, weaker: number): number {
@@ -45,19 +48,19 @@ export function numericalAdvantage(stronger: number, weaker: number): number {
 }
 
 function computeModifier(
-  army: ArmyRow,
-  enemy: ArmyRow,
+  s: ArmySheetStats,
+  enemy: ArmySheetStats,
   isDefender: boolean,
   attackerSpecified: boolean,
 ): number {
-  const myStr = effectiveStrength(army);
+  const myStr = effectiveStrength(s);
   const enemyStr = effectiveStrength(enemy);
 
   let mod = 0;
 
   if (myStr > enemyStr) mod += numericalAdvantage(myStr, enemyStr);
-  if (army.morale > enemy.morale) mod += army.morale - enemy.morale;
-  if (army.supplies === 0) mod -= 1;
+  if (s.morale > enemy.morale) mod += s.morale - enemy.morale;
+  if (s.supplies === 0) mod -= 1;
   if (isDefender && attackerSpecified) mod += 1;
 
   return mod;
@@ -67,14 +70,15 @@ export function resolveBattle(
   database: Database.Database,
   armyAId: number,
   armyBId: number,
+  stats: Map<number, ArmySheetStats>,
   attackerId: number | null,
   rng: () => number = Math.random,
 ): BattleOutcome | { error: string } {
   const roll2d6 = () => Math.ceil(rng() * 6) + Math.ceil(rng() * 6);
   const roll1d6 = () => Math.ceil(rng() * 6);
 
-  const armyA = database.prepare('SELECT * FROM armies WHERE id = ?').get(armyAId) as ArmyRow | undefined;
-  const armyB = database.prepare('SELECT * FROM armies WHERE id = ?').get(armyBId) as ArmyRow | undefined;
+  const armyA = database.prepare('SELECT id, name, hex_q, hex_r FROM armies WHERE id = ?').get(armyAId) as ArmyRow | undefined;
+  const armyB = database.prepare('SELECT id, name, hex_q, hex_r FROM armies WHERE id = ?').get(armyBId) as ArmyRow | undefined;
 
   if (!armyA) return { error: `No army with ID ${armyAId}.` };
   if (!armyB) return { error: `No army with ID ${armyBId}.` };
@@ -82,12 +86,17 @@ export function resolveBattle(
     return { error: `Armies are not in the same hex.` };
   }
 
+  const statsA = stats.get(armyAId);
+  const statsB = stats.get(armyBId);
+  if (!statsA) return { error: `No stats available for army ${armyAId}. Ensure sheet is configured.` };
+  if (!statsB) return { error: `No stats available for army ${armyBId}. Ensure sheet is configured.` };
+
   const attackerIsA = attackerId === armyAId;
   const attackerIsB = attackerId === armyBId;
   const attackerSpecified = attackerIsA || attackerIsB;
 
-  const modA = computeModifier(armyA, armyB, attackerIsB, attackerSpecified);
-  const modB = computeModifier(armyB, armyA, attackerIsA, attackerSpecified);
+  const modA = computeModifier(statsA, statsB, attackerIsB, attackerSpecified);
+  const modB = computeModifier(statsB, statsA, attackerIsA, attackerSpecified);
 
   const rollA = roll2d6();
   const rollB = roll2d6();
@@ -148,41 +157,35 @@ export function resolveBattle(
     loserCaptured = diff >= 6 ? captureRoll <= 2 : captureRoll <= 1;
   }
 
-  const applyCasualties = (armyId: number, casualtyPct: number, moraleDelta: number) => {
+  const applyCasualties = (s: ArmySheetStats, casualtyPct: number, moraleDelta: number) => {
     const factor = (100 - casualtyPct) / 100;
-    database
-      .prepare(
-        `UPDATE armies SET
-           infantry      = MAX(0, CAST(ROUND(infantry * ?) AS INTEGER)),
-           cavalry       = MAX(0, CAST(ROUND(cavalry * ?) AS INTEGER)),
-           noncombatants = MAX(0, CAST(ROUND(noncombatants * ?) AS INTEGER)),
-           morale        = MIN(max_morale, MAX(1, morale + ?))
-         WHERE id = ?`,
-      )
-      .run(factor, factor, factor, moraleDelta, armyId);
+    s.infantry = Math.max(0, Math.round(s.infantry * factor));
+    s.cavalry = Math.max(0, Math.round(s.cavalry * factor));
+    s.noncombatants = Math.max(0, Math.round(s.noncombatants * factor));
+    s.morale = Math.min(s.max_morale, Math.max(1, s.morale + moraleDelta));
   };
 
   if (winner === 'a') {
-    applyCasualties(armyAId, victorCasualtyPct, victorMoraleDelta);
-    applyCasualties(armyBId, loserCasualtyPct, loserMoraleDelta);
+    applyCasualties(statsA, victorCasualtyPct, victorMoraleDelta);
+    applyCasualties(statsB, loserCasualtyPct, loserMoraleDelta);
   } else if (winner === 'b') {
-    applyCasualties(armyBId, victorCasualtyPct, victorMoraleDelta);
-    applyCasualties(armyAId, loserCasualtyPct, loserMoraleDelta);
+    applyCasualties(statsB, victorCasualtyPct, victorMoraleDelta);
+    applyCasualties(statsA, loserCasualtyPct, loserMoraleDelta);
   } else {
-    applyCasualties(armyAId, 5, 0);
-    applyCasualties(armyBId, 5, 0);
+    applyCasualties(statsA, 5, 0);
+    applyCasualties(statsB, 5, 0);
   }
 
   if (attackerPenalty) {
-    const penaltyId = attackerIsA ? armyAId : armyBId;
-    database.prepare('UPDATE armies SET morale = MAX(1, morale - 1) WHERE id = ?').run(penaltyId);
+    const penaltyStats = attackerIsA ? statsA : statsB;
+    penaltyStats.morale = Math.max(1, penaltyStats.morale - 1);
   }
 
   return {
     sideA: {
       armyId: armyAId,
       name: armyA.name ?? String(armyAId),
-      effectiveStrength: effectiveStrength(armyA),
+      effectiveStrength: effectiveStrength(statsA),
       modifier: modA,
       roll: rollA,
       total: totalA,
@@ -190,7 +193,7 @@ export function resolveBattle(
     sideB: {
       armyId: armyBId,
       name: armyB.name ?? String(armyBId),
-      effectiveStrength: effectiveStrength(armyB),
+      effectiveStrength: effectiveStrength(statsB),
       modifier: modB,
       roll: rollB,
       total: totalB,

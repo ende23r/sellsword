@@ -3,6 +3,7 @@ import type { TextChannel } from 'discord.js';
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { resolveBattle, type BattleOutcome } from '../lib/battle.js';
+import { extractSheetId, fetchArmyStats, syncArmySheet, type ArmySheetStats } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 function sign(n: number): string {
@@ -44,6 +45,20 @@ function formatAdminMessage(outcome: BattleOutcome): string {
   return lines.join('\n');
 }
 
+async function fetchStatsForArmy(armyId: number): Promise<{ sheetId: string; stats: ArmySheetStats } | { error: string }> {
+  const row = db
+    .prepare('SELECT c.army_sheet_url FROM commanders c JOIN armies a ON a.commander_id = c.id WHERE a.id = ?')
+    .get(armyId) as { army_sheet_url: string | null } | undefined;
+  const sheetId = extractSheetId(row?.army_sheet_url);
+  if (!sheetId) return { error: `Army ${armyId} has no sheet configured.` };
+  try {
+    const stats = await fetchArmyStats(sheetId);
+    return { sheetId, stats };
+  } catch (err) {
+    return { error: `Failed to fetch stats for army ${armyId}: ${(err as Error).message}` };
+  }
+}
+
 const battle: Command = {
   data: new SlashCommandBuilder()
     .setName('battle')
@@ -69,11 +84,39 @@ const battle: Command = {
     const armyBId = interaction.options.getInteger('army_b', true);
     const attackerId = interaction.options.getInteger('attacker_id') ?? null;
 
-    const outcome = resolveBattle(db, armyAId, armyBId, attackerId);
+    const [resultA, resultB] = await Promise.all([
+      fetchStatsForArmy(armyAId),
+      fetchStatsForArmy(armyBId),
+    ]);
+
+    if ('error' in resultA) { await interaction.editReply(`❌ ${resultA.error}`); return; }
+    if ('error' in resultB) { await interaction.editReply(`❌ ${resultB.error}`); return; }
+
+    const statsMap = new Map([
+      [armyAId, resultA.stats],
+      [armyBId, resultB.stats],
+    ]);
+
+    const outcome = resolveBattle(db, armyAId, armyBId, statsMap, attackerId);
 
     if ('error' in outcome) {
       await interaction.editReply(`❌ ${outcome.error}`);
       return;
+    }
+
+    // Write updated stats back to both sheets
+    for (const [armyId, sheetId] of [[armyAId, resultA.sheetId], [armyBId, resultB.sheetId]] as [number, string][]) {
+      const armyRow = db
+        .prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?')
+        .get(armyId) as { hex_q: number; hex_r: number } | undefined;
+      const stats = statsMap.get(armyId);
+      if (armyRow && stats) {
+        try {
+          await syncArmySheet(sheetId, stats, armyRow.hex_q, armyRow.hex_r);
+        } catch {
+          // Non-fatal: battle result is logged even if sheet sync fails
+        }
+      }
     }
 
     const adminMsg = formatAdminMessage(outcome);

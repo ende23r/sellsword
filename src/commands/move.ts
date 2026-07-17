@@ -1,5 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId, getHex } from '../lib/db.js';
+import db, { getArmyByDiscordId, getCommanderByDiscordId, getHex } from '../lib/db.js';
+import { extractSheetId, fetchArmyStats } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const move: Command = {
@@ -57,13 +58,19 @@ const move: Command = {
       return;
     }
 
-    if (!roadsOnly && army.wagons > 0) {
-      await interaction.reply({
-        content:
-          '⚠️ Armies with wagons cannot travel off-road. Use `roads_only: true` or detach your wagons first.',
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
+    if (!roadsOnly) {
+      const commander = getCommanderByDiscordId(interaction.user.id);
+      const sheetId = extractSheetId(commander?.army_sheet_url);
+      if (sheetId) {
+        await interaction.deferReply();
+        const armyStats = await fetchArmyStats(sheetId);
+        if (armyStats.wagons > 0) {
+          await interaction.editReply(
+            '⚠️ Armies with wagons cannot travel off-road. Use `roads_only: true` or detach your wagons first.',
+          );
+          return;
+        }
+      }
     }
 
     // One live order at a time: cancel any existing move or forage order
@@ -82,9 +89,13 @@ const move: Command = {
         Math.abs(army.hex_r - destR)) /
         2,
     );
-    await interaction.reply(
-      `✅ Move order queued: **(${army.hex_q},${army.hex_r}) → (${destQ},${destR})** (${dist} hex${dist !== 1 ? 'es' : ''} away) — army will advance each night tick until it arrives.\nTerrain: **${destHex.terrain}**${roadsOnly ? ' · roads only' : ''}`,
-    );
+    const msg = `✅ Move order queued: **(${army.hex_q},${army.hex_r}) → (${destQ},${destR})** (${dist} hex${dist !== 1 ? 'es' : ''} away) — army will advance each night tick until it arrives.\nTerrain: **${destHex.terrain}**${roadsOnly ? ' · roads only' : ''}`;
+
+    if (interaction.deferred) {
+      await interaction.editReply(msg);
+    } else {
+      await interaction.reply(msg);
+    }
   },
 };
 

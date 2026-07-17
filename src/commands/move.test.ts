@@ -7,7 +7,8 @@ vi.mock('../lib/db.js', () => ({
   default: {
     prepare: vi.fn().mockReturnValue({ run: mockRun }),
   },
-  getArmyByDiscordId: vi.fn().mockReturnValue({ id: 1, hex_q: 2, hex_r: 3, wagons: 0 }),
+  getArmyByDiscordId: vi.fn().mockReturnValue({ id: 1, hex_q: 2, hex_r: 3 }),
+  getCommanderByDiscordId: vi.fn().mockReturnValue(null), // no sheet → skip wagons check
   getHex: vi.fn().mockReturnValue({ terrain: 'flatland', speed: 6 }),
 }));
 

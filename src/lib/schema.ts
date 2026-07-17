@@ -46,23 +46,7 @@ export const DB_SCHEMA = `
     commander_id    INTEGER NOT NULL UNIQUE REFERENCES commanders(id),
     name            TEXT,
     hex_q           INTEGER NOT NULL DEFAULT 0,
-    hex_r           INTEGER NOT NULL DEFAULT 0,
-    infantry          INTEGER NOT NULL DEFAULT 0,
-    infantry_strength INTEGER NOT NULL DEFAULT 0,
-    cavalry           INTEGER NOT NULL DEFAULT 0,
-    cavalry_strength  INTEGER NOT NULL DEFAULT 0,
-    wagons            INTEGER NOT NULL DEFAULT 0,
-    noncombatants     INTEGER NOT NULL DEFAULT 0,
-    scouting_range    INTEGER NOT NULL DEFAULT 1,
-    morale            INTEGER NOT NULL DEFAULT 9,
-    resting_morale    INTEGER NOT NULL DEFAULT 9,
-    max_morale        INTEGER NOT NULL DEFAULT 12,
-    supplies          INTEGER NOT NULL DEFAULT 0,
-    coin              INTEGER NOT NULL DEFAULT 0,
-    goods             INTEGER NOT NULL DEFAULT 0,
-    forced_march      INTEGER NOT NULL DEFAULT 0,
-    night_march       INTEGER NOT NULL DEFAULT 0,
-    stance            TEXT    NOT NULL DEFAULT 'allow' CHECK(stance IN ('allow', 'block'))
+    hex_r           INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS detachments (

@@ -1,27 +1,34 @@
-// Game loop processors — all functions take `database` as first arg so they can
-// be tested with an in-memory DB without touching the live singleton.
+// Game loop processors — all functions take `database` as first arg and `stats` as second
+// so they can be tested with an in-memory DB and an injectable stats map without touching
+// the live singleton or the Google Sheets API.
 
 import type Database from 'better-sqlite3';
 import { EmbedBuilder, type Client, type TextChannel } from 'discord.js';
 import type { ArmyRow, HexRow, OrderRow } from './db.js'; // type-only: no side effects
+import type { ArmySheetStats } from './sheets.js';
 import { findPath, hexesInRange } from './hex.js';
 
 type Log = string[];
 
 // ── Supply consumption (morning tick) ────────────────────────────────────────
 
-export function consumeSupplies(database: Database.Database, log: Log): void {
-  const armies = database.prepare('SELECT * FROM armies').all() as ArmyRow[];
-  const update = database.prepare('UPDATE armies SET supplies = MAX(0, supplies - ?) WHERE id = ?');
-  const penalizeMorale = database.prepare(
-    'UPDATE armies SET morale = MAX(1, morale - 1) WHERE id = ? AND supplies = 0',
-  );
+export function consumeSupplies(
+  database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
+  log: Log,
+): void {
+  const armies = database.prepare('SELECT id, name FROM armies').all() as Pick<ArmyRow, 'id' | 'name'>[];
 
   for (const army of armies) {
-    const consumption = army.infantry + army.noncombatants + (army.cavalry + army.wagons) * 10;
-    update.run(consumption, army.id);
-    if (army.supplies < consumption) {
-      penalizeMorale.run(army.id);
+    const s = stats.get(army.id);
+    if (!s) continue;
+
+    const consumption = s.infantry + s.noncombatants + (s.cavalry + s.wagons) * 10;
+    const wasOut = s.supplies < consumption;
+    s.supplies = Math.max(0, s.supplies - consumption);
+
+    if (wasOut) {
+      s.morale = Math.max(1, s.morale - 1);
       log.push(`⚠️ **${army.name ?? army.id}** ran out of supplies and lost 1 morale.`);
     }
   }
@@ -29,34 +36,11 @@ export function consumeSupplies(database: Database.Database, log: Log): void {
 
 // ── Night march movement (morning tick) ──────────────────────────────────────
 
-export function processNightMarchMovement(database: Database.Database, log: Log): void {
-  const orders = database
-    .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'move'")
-    .all() as OrderRow[];
-  const validCoords = buildValidCoords(database);
-
-  for (const order of orders) {
-    const army = database
-      .prepare('SELECT * FROM armies WHERE id = ?')
-      .get(order.army_id) as ArmyRow | undefined;
-    if (!army || !army.night_march) continue;
-
-    const params = JSON.parse(order.parameters) as { roads_only: boolean };
-    if (!params.roads_only) {
-      log.push(`⚠️ **${army.name ?? army.id}** cannot night march off-road.`);
-      continue;
-    }
-
-    // 6 miles/night = 1 hex; forced march adds another (12 miles = 2 hexes)
-    const hexesAllowed = army.forced_march ? 2 : 1;
-    advanceArmy(database, army, order, hexesAllowed, validCoords, log);
-    rollMarchMorale(database, army, 'night', log);
-  }
-}
-
-// ── Day movement (night tick) ─────────────────────────────────────────────────
-
-export function processMovement(database: Database.Database, log: Log): void {
+export function processNightMarchMovement(
+  database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
+  log: Log,
+): void {
   const orders = database
     .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'move'")
     .all() as OrderRow[];
@@ -68,10 +52,47 @@ export function processMovement(database: Database.Database, log: Log): void {
       .get(order.army_id) as ArmyRow | undefined;
     if (!army) continue;
 
+    const s = stats.get(army.id);
+    if (!s || !s.night_march) continue;
+
+    const params = JSON.parse(order.parameters) as { roads_only: boolean };
+    if (!params.roads_only) {
+      log.push(`⚠️ **${army.name ?? army.id}** cannot night march off-road.`);
+      continue;
+    }
+
+    // 6 miles/night = 1 hex; forced march adds another (12 miles = 2 hexes)
+    const hexesAllowed = s.forced_march ? 2 : 1;
+    advanceArmy(database, army, order, hexesAllowed, validCoords, log);
+    rollMarchMorale(stats, army.id, army.name ?? String(army.id), 'night', log);
+  }
+}
+
+// ── Day movement (night tick) ─────────────────────────────────────────────────
+
+export function processMovement(
+  database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
+  log: Log,
+): void {
+  const orders = database
+    .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'move'")
+    .all() as OrderRow[];
+  const validCoords = buildValidCoords(database);
+
+  for (const order of orders) {
+    const army = database
+      .prepare('SELECT * FROM armies WHERE id = ?')
+      .get(order.army_id) as ArmyRow | undefined;
+    if (!army) continue;
+
+    const s = stats.get(army.id);
+    if (!s) continue;
+
     const params = JSON.parse(order.parameters) as { roads_only: boolean };
     const onRoad = params.roads_only;
-    const forced = Boolean(army.forced_march);
-    const cavalryOnly = army.infantry === 0 && army.wagons === 0;
+    const forced = s.forced_march;
+    const cavalryOnly = s.infantry === 0 && s.wagons === 0;
 
     const currentHex = database
       .prepare('SELECT speed FROM hexes WHERE q = ? AND r = ?')
@@ -90,10 +111,7 @@ export function processMovement(database: Database.Database, log: Log): void {
     advanceArmy(database, army, order, hexesAllowed, validCoords, log);
 
     if (forced) {
-      const refreshed = database
-        .prepare('SELECT * FROM armies WHERE id = ?')
-        .get(army.id) as ArmyRow;
-      rollMarchMorale(database, refreshed, 'forced', log);
+      rollMarchMorale(stats, army.id, army.name ?? String(army.id), 'forced', log);
     }
   }
 
@@ -101,10 +119,10 @@ export function processMovement(database: Database.Database, log: Log): void {
 }
 
 // ── Forage (night tick) ───────────────────────────────────────────────────────
-// Forages current hex and all adjacent hexes. Cavalry extends range to 2 hexes.
 
 export function processForage(
   database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
   log: Log,
   movingArmyIds: Set<number>,
 ): void {
@@ -120,7 +138,10 @@ export function processForage(
       .get(order.army_id) as ArmyRow | undefined;
     if (!army) continue;
 
-    const range = army.scouting_range ?? 1;
+    const s = stats.get(army.id);
+    if (!s) continue;
+
+    const range = s.scouting_range;
     const hexCoords = hexesInRange({ q: army.hex_q, r: army.hex_r }, range);
 
     let totalYield = 0;
@@ -147,9 +168,7 @@ export function processForage(
     }
 
     if (totalYield > 0) {
-      database
-        .prepare('UPDATE armies SET supplies = supplies + ? WHERE id = ?')
-        .run(totalYield, army.id);
+      s.supplies += totalYield;
       log.push(
         `🌾 **${army.name ?? army.id}** foraged ${totalYield.toLocaleString()} supplies` +
           (range > 1 ? ` (scouting range ${range} hexes)` : '') +
@@ -243,13 +262,14 @@ export function formatDateUTC(date: Date): string {
 
 export async function postSupplyUpdates(
   database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
   client: Client,
   log: Log,
   now: Date = new Date(),
 ): Promise<void> {
   const rows = database
     .prepare(
-      `SELECT a.*, c.discord_channel_id, c.army_sheet_url
+      `SELECT a.id, a.name, a.hex_q, a.hex_r, c.discord_channel_id, c.army_sheet_url
        FROM armies a
        JOIN commanders c ON c.id = a.commander_id`,
     )
@@ -258,12 +278,15 @@ export async function postSupplyUpdates(
   for (const army of rows) {
     if (!army.discord_channel_id) continue;
 
-    const consumption = army.infantry + army.noncombatants + (army.cavalry + army.wagons) * 10;
-    const daysLeft = consumption > 0 ? Math.floor(army.supplies / consumption) : null;
+    const s = stats.get(army.id);
+    if (!s) continue;
+
+    const consumption = s.infantry + s.noncombatants + (s.cavalry + s.wagons) * 10;
+    const daysLeft = consumption > 0 ? Math.floor(s.supplies / consumption) : null;
 
     let description =
       `📅 ${formatDateUTC(now)} UTC\n` +
-      `📦 Supplies ${army.supplies.toLocaleString()} • 📉 Cons ${consumption.toLocaleString()}/d • ⏰ Days ${daysLeft ?? '∞'}`;
+      `📦 Supplies ${s.supplies.toLocaleString()} • 📉 Cons ${consumption.toLocaleString()}/d • ⏰ Days ${daysLeft ?? '∞'}`;
 
     if (daysLeft !== null) {
       const zeroDate = new Date(now.getTime() + daysLeft * 86400000);
@@ -334,19 +357,19 @@ function advanceArmy(
 }
 
 export function rollMarchMorale(
-  database: Database.Database,
-  army: ArmyRow,
+  stats: Map<number, ArmySheetStats>,
+  armyId: number,
+  armyName: string,
   type: 'forced' | 'night',
   log: Log,
 ): void {
   const d1 = Math.ceil(Math.random() * 6);
   const d2 = Math.ceil(Math.random() * 6);
   if (d1 === d2) {
-    database
-      .prepare('UPDATE armies SET morale = MAX(1, morale - 1) WHERE id = ?')
-      .run(army.id);
+    const s = stats.get(armyId);
+    if (s) s.morale = Math.max(1, s.morale - 1);
     log.push(
-      `😓 **${army.name ?? army.id}** lost 1 morale from ${type} march (rolled ${d1},${d2}).`,
+      `😓 **${armyName}** lost 1 morale from ${type} march (rolled ${d1},${d2}).`,
     );
   }
 }

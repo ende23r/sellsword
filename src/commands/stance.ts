@@ -1,5 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId } from '../lib/db.js';
+import { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
+import { extractSheetId, writeStance } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const stance: Command = {
@@ -24,8 +25,15 @@ const stance: Command = {
       return;
     }
 
+    const commander = getCommanderByDiscordId(interaction.user.id);
+    const sheetId = extractSheetId(commander?.army_sheet_url);
+    if (!sheetId) {
+      await interaction.reply({ content: 'Your army has no sheet configured.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
     const posture = interaction.options.getString('posture', true) as 'allow' | 'block';
-    db.prepare('UPDATE armies SET stance = ? WHERE id = ?').run(posture, army.id);
+    await writeStance(sheetId, posture);
 
     await interaction.reply(
       posture === 'block'

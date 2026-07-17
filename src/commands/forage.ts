@@ -1,6 +1,7 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId, getHex, type HexRow } from '../lib/db.js';
+import db, { getArmyByDiscordId, getCommanderByDiscordId, getHex, type HexRow } from '../lib/db.js';
 import { hexesInRange } from '../lib/hex.js';
+import { extractSheetId, fetchArmyStats } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const forage: Command = {
@@ -21,7 +22,17 @@ const forage: Command = {
       return;
     }
 
-    const range = army.scouting_range ?? 1;
+    const commander = getCommanderByDiscordId(interaction.user.id);
+    const sheetId = extractSheetId(commander?.army_sheet_url);
+    if (!sheetId) {
+      await interaction.reply({ content: 'Your army has no sheet configured.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply();
+
+    const armyStats = await fetchArmyStats(sheetId);
+    const range = armyStats.scouting_range;
     const coords = hexesInRange({ q: army.hex_q, r: army.hex_r }, range);
 
     let totalYield = 0;
@@ -55,7 +66,7 @@ const forage: Command = {
       `**Potential yield:** ${totalYield.toLocaleString()} supplies` +
       (exhaustedCount > 0 ? ` (${exhaustedCount} exhausted hex${exhaustedCount > 1 ? 'es' : ''} skipped)` : '');
 
-    await interaction.reply(msg);
+    await interaction.editReply(msg);
   },
 };
 

@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
+import type { ArmySheetStats } from './sheets.js';
 import {
   consumeSupplies,
   deliverMessages,
@@ -27,15 +28,6 @@ function seedArmy(
     name?: string;
     hex_q?: number;
     hex_r?: number;
-    infantry?: number;
-    cavalry?: number;
-    wagons?: number;
-    noncombatants?: number;
-    scouting_range?: number;
-    morale?: number;
-    supplies?: number;
-    forced_march?: number;
-    night_march?: number;
   } = {},
 ): number {
   const id = overrides.id ?? ++seq;
@@ -44,27 +36,37 @@ function seedArmy(
     `user-${id}`,
   );
   db.prepare(
-    `INSERT INTO armies
-      (id, commander_id, name, hex_q, hex_r, infantry, cavalry, wagons,
-       noncombatants, scouting_range, morale, supplies, forced_march, night_march)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO armies (id, commander_id, name, hex_q, hex_r) VALUES (?, ?, ?, ?, ?)`,
   ).run(
     id,
     id,
     overrides.name ?? `Army ${id}`,
     overrides.hex_q ?? 0,
     overrides.hex_r ?? 0,
-    overrides.infantry ?? 1000,
-    overrides.cavalry ?? 0,
-    overrides.wagons ?? 0,
-    overrides.noncombatants ?? 0,
-    overrides.scouting_range ?? 1,
-    overrides.morale ?? 9,
-    overrides.supplies ?? 10000,
-    overrides.forced_march ?? 0,
-    overrides.night_march ?? 0,
   );
   return id;
+}
+
+function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
+  return {
+    infantry: 1000,
+    infantry_strength: 0,
+    cavalry: 0,
+    cavalry_strength: 0,
+    wagons: 0,
+    noncombatants: 0,
+    scouting_range: 1,
+    morale: 9,
+    resting_morale: 9,
+    max_morale: 12,
+    supplies: 10000,
+    coin: 0,
+    goods: 0,
+    stance: 'allow',
+    forced_march: false,
+    night_march: false,
+    ...overrides,
+  };
 }
 
 function seedHex(
@@ -112,38 +114,38 @@ describe('consumeSupplies', () => {
   });
 
   it('deducts daily supply consumption', () => {
-    seedArmy(db, { infantry: 1000, cavalry: 0, noncombatants: 0, supplies: 5000 });
-    consumeSupplies(db, []);
-    const army = db.prepare('SELECT * FROM armies WHERE id = 1').get() as { supplies: number };
-    expect(army.supplies).toBe(4000); // 1000 infantry × 1/day
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 1000, cavalry: 0, noncombatants: 0, supplies: 5000 })]]);
+    consumeSupplies(db, stats, []);
+    expect(stats.get(id)!.supplies).toBe(4000); // 1000 infantry × 1/day
   });
 
   it('does not reduce supplies below 0', () => {
-    seedArmy(db, { infantry: 100, supplies: 50 });
-    consumeSupplies(db, []);
-    const army = db.prepare('SELECT * FROM armies WHERE id = 1').get() as { supplies: number };
-    expect(army.supplies).toBe(0);
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 50 })]]);
+    consumeSupplies(db, stats, []);
+    expect(stats.get(id)!.supplies).toBe(0);
   });
 
   it('reduces morale by 1 when army cannot pay', () => {
-    seedArmy(db, { infantry: 100, supplies: 50, morale: 9 });
-    consumeSupplies(db, []);
-    const army = db.prepare('SELECT * FROM armies WHERE id = 1').get() as { morale: number };
-    expect(army.morale).toBe(8);
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 50, morale: 9 })]]);
+    consumeSupplies(db, stats, []);
+    expect(stats.get(id)!.morale).toBe(8);
   });
 
   it('does not reduce morale when army has enough supplies', () => {
-    seedArmy(db, { infantry: 100, supplies: 10000, morale: 9 });
-    consumeSupplies(db, []);
-    const army = db.prepare('SELECT * FROM armies WHERE id = 1').get() as { morale: number };
-    expect(army.morale).toBe(9);
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 10000, morale: 9 })]]);
+    consumeSupplies(db, stats, []);
+    expect(stats.get(id)!.morale).toBe(9);
   });
 
   it('does not reduce morale below 1', () => {
-    seedArmy(db, { infantry: 100, supplies: 0, morale: 1 });
-    consumeSupplies(db, []);
-    const army = db.prepare('SELECT * FROM armies WHERE id = 1').get() as { morale: number };
-    expect(army.morale).toBe(1);
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 0, morale: 1 })]]);
+    consumeSupplies(db, stats, []);
+    expect(stats.get(id)!.morale).toBe(1);
   });
 });
 
@@ -158,7 +160,8 @@ describe('processForage', () => {
   });
 
   it('forages current hex and all 6 adjacent hexes', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, supplies: 0, infantry: 0 });
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0, scouting_range: 1 })]]);
     // Center + 6 neighbors = 7 hexes
     for (const [q, r] of [
       [0, 0],
@@ -173,68 +176,54 @@ describe('processForage', () => {
     }
     seedOrder(db, armyId, 'forage');
 
-    processForage(db, [], new Set());
+    processForage(db, stats, [], new Set());
 
-    const army = db.prepare('SELECT supplies FROM armies WHERE id = ?').get(armyId) as {
-      supplies: number;
-    };
-    expect(army.supplies).toBe(7 * 10 * 500); // 35,000
+    expect(stats.get(armyId)!.supplies).toBe(7 * 10 * 500); // 35,000
   });
 
   it('skips exhausted hexes', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, supplies: 0, infantry: 0 });
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 5 });
     seedOrder(db, armyId, 'forage');
 
-    processForage(db, [], new Set());
+    processForage(db, stats, [], new Set());
 
-    const army = db.prepare('SELECT supplies FROM armies WHERE id = ?').get(armyId) as {
-      supplies: number;
-    };
-    expect(army.supplies).toBe(0);
+    expect(stats.get(armyId)!.supplies).toBe(0);
   });
 
   it('skips armies in the moving set', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, supplies: 0, infantry: 0 });
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100 });
     seedOrder(db, armyId, 'forage');
 
-    processForage(db, [], new Set([armyId]));
+    processForage(db, stats, [], new Set([armyId]));
 
-    const army = db.prepare('SELECT supplies FROM armies WHERE id = ?').get(armyId) as {
-      supplies: number;
-    };
-    expect(army.supplies).toBe(0);
+    expect(stats.get(armyId)!.supplies).toBe(0);
   });
 
   it('extends range to 2 hexes when scouting_range is 2', () => {
-    const armyId = seedArmy(db, {
-      hex_q: 0,
-      hex_r: 0,
-      scouting_range: 2,
-      infantry: 0,
-      supplies: 0,
-    });
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0, scouting_range: 2 })]]);
     seedHex(db, 0, 0, { settlement: 10 }); // range 0
     seedHex(db, 0, 2, { settlement: 10 }); // range 2 (NW twice)
     seedHex(db, 2, -2, { settlement: 10 }); // range 2
     seedOrder(db, armyId, 'forage');
 
-    processForage(db, [], new Set());
+    processForage(db, stats, [], new Set());
 
-    const army = db.prepare('SELECT supplies FROM armies WHERE id = ?').get(armyId) as {
-      supplies: number;
-    };
     // Must forage more than just the center hex
-    expect(army.supplies).toBeGreaterThan(10 * 500);
+    expect(stats.get(armyId)!.supplies).toBeGreaterThan(10 * 500);
   });
 
   it('increments forage_count on each foraged hex', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, infantry: 0 });
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 0 });
     seedOrder(db, armyId, 'forage');
 
-    processForage(db, [], new Set());
+    processForage(db, stats, [], new Set());
 
     const hex = db.prepare('SELECT forage_count FROM hexes WHERE q = 0 AND r = 0').get() as {
       forage_count: number;
@@ -243,23 +232,25 @@ describe('processForage', () => {
   });
 
   it('logs revolt risk when any foraged hex has been foraged before', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, infantry: 0 });
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 1 });
     seedOrder(db, armyId, 'forage');
 
     const log: string[] = [];
-    processForage(db, log, new Set());
+    processForage(db, stats, log, new Set());
 
     expect(log.some((l) => l.toLowerCase().includes('revolt'))).toBe(true);
   });
 
   it('does not log revolt risk when all foraged hexes are fresh', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, infantry: 0 });
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 0 });
     seedOrder(db, armyId, 'forage');
 
     const log: string[] = [];
-    processForage(db, log, new Set());
+    processForage(db, stats, log, new Set());
 
     expect(log.some((l) => l.toLowerCase().includes('revolt'))).toBe(false);
   });
@@ -277,11 +268,12 @@ describe('processMovement', () => {
 
   it('moves army to adjacent destination and marks order processed', () => {
     const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
     seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 1, roads_only: false });
 
-    processMovement(db, []);
+    processMovement(db, stats, []);
 
     const army = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(armyId) as {
       hex_q: number;
@@ -298,13 +290,14 @@ describe('processMovement', () => {
 
   it('advances 1 hex per tick off-road, leaving order pending', () => {
     const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
     seedHex(db, 0, 2);
     seedHex(db, 0, 3);
     seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 3, roads_only: false });
 
-    processMovement(db, []);
+    processMovement(db, stats, []);
 
     const army = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(armyId) as {
       hex_r: number;
@@ -319,13 +312,14 @@ describe('processMovement', () => {
 
   it('advances 2 hexes per tick on road', () => {
     const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
     seedHex(db, 0, 2);
     seedHex(db, 0, 3);
     seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 3, roads_only: true });
 
-    processMovement(db, []);
+    processMovement(db, stats, []);
 
     const army = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(armyId) as {
       hex_r: number;
@@ -335,13 +329,14 @@ describe('processMovement', () => {
 
   it('cannot path through a speed=0 hex', () => {
     const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);                    // passable
     seedHex(db, 0, 1, { speed: 0 });      // impassable — only route to (0,2)
     seedHex(db, 0, 2);                    // passable but unreachable
     seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
 
     const log: string[] = [];
-    processMovement(db, log);
+    processMovement(db, stats, log);
 
     const army = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(armyId) as { hex_q: number; hex_r: number };
     expect(army.hex_q).toBe(0);
@@ -351,13 +346,14 @@ describe('processMovement', () => {
 
   it('off-road movement distance is determined by current hex speed', () => {
     const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0, { speed: 12 }); // double speed — should move 2 hexes off-road
     seedHex(db, 0, 1, { speed: 12 });
     seedHex(db, 0, 2, { speed: 12 });
     seedHex(db, 0, 3, { speed: 12 });
     seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 3, roads_only: false });
 
-    processMovement(db, []);
+    processMovement(db, stats, []);
 
     const army = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(armyId) as { hex_r: number };
     expect(army.hex_r).toBe(2);
@@ -365,11 +361,12 @@ describe('processMovement', () => {
 
   it('cancels order and logs warning when no valid path exists', () => {
     const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedOrder(db, armyId, 'move', { dest_q: 9, dest_r: 9, roads_only: false });
 
     const log: string[] = [];
-    processMovement(db, log);
+    processMovement(db, stats, log);
 
     const order = db.prepare('SELECT processed_at FROM orders WHERE army_id = ?').get(armyId) as {
       processed_at: string | null;
@@ -535,11 +532,12 @@ describe('postSupplyUpdates', () => {
   }
 
   it('posts an embed to the army channel', async () => {
-    const id = seedArmy(db, { name: 'Iron Legion', infantry: 1000, supplies: 5000 });
+    const id = seedArmy(db, { name: 'Iron Legion' });
+    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 5000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
-    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
 
     expect(send).toHaveBeenCalledOnce();
     const embed = getEmbed(send);
@@ -550,40 +548,55 @@ describe('postSupplyUpdates', () => {
   });
 
   it('sets the embed color based on days remaining', async () => {
-    const id = seedArmy(db, { infantry: 1000, supplies: 5000 }); // 5 days → orange
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 5000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
-    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
 
     expect(getEmbed(send).color).toBe(0xe67e22); // orange: 4–7 days
   });
 
   it('skips armies with no discord_channel_id', async () => {
-    seedArmy(db, { infantry: 1000, supplies: 5000 });
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 5000 })]]);
 
     const send = vi.fn();
-    await postSupplyUpdates(db, makeClient(send) as never, [], new Date());
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('skips armies with no stats entry', async () => {
+    const id = seedArmy(db);
+    // No entry in stats map
+    const stats = new Map<number, ArmySheetStats>();
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn();
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
     expect(send).not.toHaveBeenCalled();
   });
 
   it('sets embed URL to army sheet when available', async () => {
-    const id = seedArmy(db, { name: 'Riders', cavalry: 100, supplies: 10000 });
+    const id = seedArmy(db, { name: 'Riders' });
+    const stats = new Map([[id, makeStats({ cavalry: 100, supplies: 10000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ?, army_sheet_url = ? WHERE id = ?')
       .run('ch-2', 'https://docs.google.com/spreadsheets/d/abc', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
-    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
 
     expect(getEmbed(send).url).toBe('https://docs.google.com/spreadsheets/d/abc');
   });
 
   it('shows zero date in description when consumption > 0', async () => {
-    const id = seedArmy(db, { infantry: 1000, supplies: 3000 });
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 3000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-3', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
-    await postSupplyUpdates(db, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date('2026-07-16T06:00:00Z'));
 
     const desc = getEmbed(send).description ?? '';
     expect(desc).toContain('Zero Date');
@@ -591,11 +604,12 @@ describe('postSupplyUpdates', () => {
   });
 
   it('omits zero date and shows ∞ when consumption is zero', async () => {
-    const id = seedArmy(db, { infantry: 0, cavalry: 0, supplies: 1000 });
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 0, cavalry: 0, supplies: 1000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-4', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
-    await postSupplyUpdates(db, makeClient(send) as never, [], new Date());
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
 
     const desc = getEmbed(send).description ?? '';
     expect(desc).toContain('∞');
@@ -603,14 +617,15 @@ describe('postSupplyUpdates', () => {
   });
 
   it('logs a warning when channel fetch fails', async () => {
-    const id = seedArmy(db, { infantry: 1000 });
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ infantry: 1000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('bad-ch', id);
 
     const log: string[] = [];
     const badClient = {
       channels: { fetch: vi.fn().mockRejectedValue(new Error('unknown channel')) },
     };
-    await postSupplyUpdates(db, badClient as never, log, new Date());
+    await postSupplyUpdates(db, stats, badClient as never, log, new Date());
     expect(log.some((l) => l.includes('supply update'))).toBe(true);
   });
 });

@@ -7,11 +7,19 @@ vi.mock('../lib/admin-notify.js', () => ({ notifyAdmin: vi.fn() }));
 const mockResolveBattle = vi.hoisted(() => vi.fn());
 vi.mock('../lib/battle.js', () => ({ resolveBattle: mockResolveBattle }));
 
-const mockChannelGet = vi.hoisted(() => vi.fn());
+const mockFetchArmyStats = vi.hoisted(() => vi.fn());
+const mockSyncArmySheet = vi.hoisted(() => vi.fn());
+const mockExtractSheetId = vi.hoisted(() => vi.fn());
+
+vi.mock('../lib/sheets.js', () => ({
+  fetchArmyStats: mockFetchArmyStats,
+  syncArmySheet: mockSyncArmySheet,
+  extractSheetId: mockExtractSheetId,
+}));
+
+const mockPrepare = vi.hoisted(() => vi.fn());
 vi.mock('../lib/db.js', () => ({
-  default: {
-    prepare: vi.fn(() => ({ get: mockChannelGet })),
-  },
+  default: { prepare: mockPrepare },
 }));
 
 const mockFetchChannel = vi.hoisted(() => vi.fn());
@@ -31,6 +39,13 @@ const mockBattleOutcome = {
   loserCaptured: false,
   hexQ: 4,
   hexR: -2,
+};
+
+const mockStats = {
+  infantry: 1000, infantry_strength: 0, cavalry: 0, cavalry_strength: 0,
+  wagons: 0, noncombatants: 0, scouting_range: 1, morale: 9, resting_morale: 9,
+  max_morale: 12, supplies: 10000, coin: 0, goods: 0, stance: 'allow' as const,
+  forced_march: false, night_march: false,
 };
 
 function makeInteraction({ armyA = 1, armyB = 2, attackerId = null as number | null } = {}) {
@@ -53,7 +68,25 @@ describe('/battle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolveBattle.mockReturnValue(mockBattleOutcome);
-    mockChannelGet.mockReturnValue({ discord_channel_id: 'ch-army-1' });
+    mockFetchArmyStats.mockResolvedValue(mockStats);
+    mockSyncArmySheet.mockResolvedValue(undefined);
+    mockExtractSheetId.mockImplementation((url: string | null) => {
+      if (!url) return null;
+      const match = url.match(/\/d\/([^/]+)/);
+      return match?.[1] ?? null;
+    });
+    // Make db.prepare().get() smart about what query is asked
+    mockPrepare.mockImplementation((sql: string) => ({
+      get: vi.fn().mockImplementation((id: number) => {
+        if (sql.includes('army_sheet_url'))
+          return { army_sheet_url: `https://docs.google.com/spreadsheets/d/sheet-${id}` };
+        if (sql.includes('hex_q'))
+          return { hex_q: 4, hex_r: -2 };
+        if (sql.includes('discord_channel_id'))
+          return { discord_channel_id: `ch-army-${id}` };
+        return null;
+      }),
+    }));
     mockFetchChannel.mockResolvedValue({
       isTextBased: () => true,
       send: vi.fn().mockResolvedValue(undefined),
@@ -74,6 +107,7 @@ describe('/battle', () => {
       expect.anything(), // db
       3,
       7,
+      expect.any(Map), // stats map
       7,
     );
   });
@@ -85,8 +119,20 @@ describe('/battle', () => {
       expect.anything(),
       expect.any(Number),
       expect.any(Number),
+      expect.any(Map),
       null,
     );
+  });
+
+  it('replies with error when army has no sheet configured', async () => {
+    mockExtractSheetId.mockReturnValue(null);
+    const { default: command } = await import('./battle.js');
+    const interaction = makeInteraction();
+    await command.execute(interaction as any);
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('no sheet configured'),
+    );
+    expect(mockResolveBattle).not.toHaveBeenCalled();
   });
 
   it('replies with error when resolveBattle returns an error', async () => {
@@ -131,7 +177,6 @@ describe('/battle', () => {
       const send = callCount === 1 ? mockSendA : mockSendB;
       return Promise.resolve({ isTextBased: () => true, send });
     });
-    mockChannelGet.mockReturnValue({ discord_channel_id: 'ch-1' });
 
     const { default: command } = await import('./battle.js');
     await command.execute(makeInteraction() as any);
@@ -140,7 +185,17 @@ describe('/battle', () => {
   });
 
   it('skips army channel notification when channel is unavailable', async () => {
-    mockChannelGet.mockReturnValue({ discord_channel_id: null });
+    mockPrepare.mockImplementation((sql: string) => ({
+      get: vi.fn().mockImplementation((id: number) => {
+        if (sql.includes('army_sheet_url'))
+          return { army_sheet_url: `https://docs.google.com/spreadsheets/d/sheet-${id}` };
+        if (sql.includes('hex_q'))
+          return { hex_q: 4, hex_r: -2 };
+        if (sql.includes('discord_channel_id'))
+          return { discord_channel_id: null };
+        return null;
+      }),
+    }));
     const { default: command } = await import('./battle.js');
     const interaction = makeInteraction();
     await expect(command.execute(interaction as any)).resolves.not.toThrow();

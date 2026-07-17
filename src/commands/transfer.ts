@@ -1,5 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId } from '../lib/db.js';
+import db, { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
+import { extractSheetId, fetchArmyStats, syncArmySheet } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 type Resource = 'supplies' | 'coin' | 'goods';
@@ -56,27 +57,50 @@ const transfer: Command = {
       return;
     }
 
-    const resource = interaction.options.getString('resource', true) as Resource;
-    const amount = interaction.options.getInteger('amount', true);
+    const senderCommander = getCommanderByDiscordId(interaction.user.id);
+    const recipientCommander = getCommanderByDiscordId(recipientUser.id);
+    const senderSheetId = extractSheetId(senderCommander?.army_sheet_url);
+    const recipientSheetId = extractSheetId(recipientCommander?.army_sheet_url);
 
-    if (sender[resource] < amount) {
-      await interaction.reply({
-        content: `You only have ${sender[resource].toLocaleString()} ${resource} — cannot transfer ${amount.toLocaleString()}.`,
-        flags: MessageFlags.Ephemeral,
-      });
+    if (!senderSheetId) {
+      await interaction.reply({ content: 'Your army has no sheet configured.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (!recipientSheetId) {
+      await interaction.reply({ content: "Recipient's army has no sheet configured.", flags: MessageFlags.Ephemeral });
       return;
     }
 
-    db.prepare(`UPDATE armies SET ${resource} = ${resource} - ? WHERE id = ?`).run(
-      amount,
-      sender.id,
-    );
-    db.prepare(`UPDATE armies SET ${resource} = ${resource} + ? WHERE id = ?`).run(
-      amount,
-      recipient.id,
-    );
+    await interaction.deferReply();
 
-    await interaction.reply(
+    const resource = interaction.options.getString('resource', true) as Resource;
+    const amount = interaction.options.getInteger('amount', true);
+
+    const [senderStats, recipientStats] = await Promise.all([
+      fetchArmyStats(senderSheetId),
+      fetchArmyStats(recipientSheetId),
+    ]);
+
+    if (senderStats[resource] < amount) {
+      await interaction.editReply(
+        `You only have ${senderStats[resource].toLocaleString()} ${resource} — cannot transfer ${amount.toLocaleString()}.`,
+      );
+      return;
+    }
+
+    senderStats[resource] -= amount;
+    recipientStats[resource] += amount;
+
+    // Look up hex positions from DB for the sheet sync (hex is display-only in Sheets)
+    const senderHex = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(sender.id) as { hex_q: number; hex_r: number };
+    const recipientHex = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(recipient.id) as { hex_q: number; hex_r: number };
+
+    await Promise.all([
+      syncArmySheet(senderSheetId, senderStats, senderHex.hex_q, senderHex.hex_r),
+      syncArmySheet(recipientSheetId, recipientStats, recipientHex.hex_q, recipientHex.hex_r),
+    ]);
+
+    await interaction.editReply(
       `✅ Transferred **${amount.toLocaleString()} ${resource}** to ${recipientUser}.`,
     );
   },

@@ -12,15 +12,78 @@
 
 import { readFileSync } from 'fs';
 import { google } from 'googleapis';
-import type Database from 'better-sqlite3';
-import type { ArmyRow, CommanderRow } from './db.js';
+import type { CommanderRow } from './db.js';
 
-// ── Army sheet stats (sheet-calculated; bot reads, does not write) ─────────────
+// ── Army sheet stats (source of truth; all army data lives here) ──────────────
 
 export type ArmySheetStats = {
+  // Logistics counts
+  infantry: number;
+  cavalry: number;
+  wagons: number;
+  noncombatants: number;
+  // Resources
+  morale: number;
+  resting_morale: number;
+  supplies: number;
+  coin: number;
+  goods: number;
+  // State
+  stance: 'allow' | 'block';
+  // Combat strengths (sheet-calculated; bot reads only)
   infantry_strength: number;
   cavalry_strength: number;
   scouting_range: number;
+  // Additional stats
+  max_morale: number;
+  forced_march: boolean;
+  night_march: boolean;
+};
+
+// TODO(eric): Update these cell references to match your army sheet template.
+// The bot reads and writes army stats to/from these named cells on the "Stats" tab.
+// Column A holds the row labels; column B holds the values.
+export const ARMY_SHEET_CELLS = {
+  INFANTRY: 'Stats!B2',
+  CAVALRY: 'Stats!B3',
+  WAGONS: 'Stats!B4',
+  NONCOMBATANTS: 'Stats!B5',
+  MORALE: 'Stats!B6',
+  RESTING_MORALE: 'Stats!B7',
+  SUPPLIES: 'Stats!B8',
+  COIN: 'Stats!B9',
+  GOODS: 'Stats!B10',
+  HEX: 'Stats!B11',        // display only — bot writes, not read back as stats
+  STANCE: 'Stats!B12',
+  INFANTRY_STRENGTH: 'Stats!B13',   // sheet-calculated; bot reads only
+  CAVALRY_STRENGTH: 'Stats!B14',    // sheet-calculated; bot reads only
+  SCOUTING_RANGE: 'Stats!B15',      // sheet-calculated; bot reads only
+  MAX_MORALE: 'Stats!B16',
+  FORCED_MARCH: 'Stats!B17',
+  NIGHT_MARCH: 'Stats!B18',
+  // Range covering all stat rows (B2:B18, 17 rows)
+  ALL_STATS: 'Stats!B2:B18',
+};
+
+// Row indices within a B2:B18 read result (0-based)
+const ROW = {
+  INFANTRY: 0,
+  CAVALRY: 1,
+  WAGONS: 2,
+  NONCOMBATANTS: 3,
+  MORALE: 4,
+  RESTING_MORALE: 5,
+  SUPPLIES: 6,
+  COIN: 7,
+  GOODS: 8,
+  // HEX is row index 9 — not a stat, skipped
+  STANCE: 10,
+  INFANTRY_STRENGTH: 11,
+  CAVALRY_STRENGTH: 12,
+  SCOUTING_RANGE: 13,
+  MAX_MORALE: 14,
+  FORCED_MARCH: 15,
+  NIGHT_MARCH: 16,
 };
 
 export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetStats {
@@ -30,23 +93,39 @@ export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetSt
     const n = Number(v);
     return v !== null && v !== '' && !isNaN(n) ? Math.round(n) : fallback;
   };
+  const bool = (v: string | number | null): boolean => {
+    if (v === null || v === '') return false;
+    const s = String(v).trim().toLowerCase();
+    return s === '1' || s === 'true' || s === 'yes';
+  };
+  const stance = (v: string | number | null): 'allow' | 'block' => {
+    return String(v ?? '').trim().toLowerCase() === 'block' ? 'block' : 'allow';
+  };
+
   return {
-    infantry_strength: num(cell(rows[0]), 0),
-    cavalry_strength: num(cell(rows[1]), 0),
-    scouting_range: num(cell(rows[2]), 1),
+    infantry: num(cell(rows[ROW.INFANTRY]), 0),
+    cavalry: num(cell(rows[ROW.CAVALRY]), 0),
+    wagons: num(cell(rows[ROW.WAGONS]), 0),
+    noncombatants: num(cell(rows[ROW.NONCOMBATANTS]), 0),
+    morale: num(cell(rows[ROW.MORALE]), 9),
+    resting_morale: num(cell(rows[ROW.RESTING_MORALE]), 9),
+    supplies: num(cell(rows[ROW.SUPPLIES]), 0),
+    coin: num(cell(rows[ROW.COIN]), 0),
+    goods: num(cell(rows[ROW.GOODS]), 0),
+    stance: stance(cell(rows[ROW.STANCE])),
+    infantry_strength: num(cell(rows[ROW.INFANTRY_STRENGTH]), 0),
+    cavalry_strength: num(cell(rows[ROW.CAVALRY_STRENGTH]), 0),
+    scouting_range: num(cell(rows[ROW.SCOUTING_RANGE]), 1),
+    max_morale: num(cell(rows[ROW.MAX_MORALE]), 12),
+    forced_march: bool(cell(rows[ROW.FORCED_MARCH])),
+    night_march: bool(cell(rows[ROW.NIGHT_MARCH])),
   };
 }
 
-export function applySheetStats(
-  database: Database.Database,
-  armyId: number,
-  { infantry_strength, cavalry_strength, scouting_range }: ArmySheetStats,
-): void {
-  database
-    .prepare(
-      'UPDATE armies SET infantry_strength = ?, cavalry_strength = ?, scouting_range = ? WHERE id = ?',
-    )
-    .run(infantry_strength, cavalry_strength, scouting_range, armyId);
+export function extractSheetId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const match = url.match(/\/d\/([^/]+)/);
+  return match?.[1] ?? null;
 }
 
 let _auth: InstanceType<typeof google.auth.GoogleAuth> | null = null;
@@ -153,40 +232,38 @@ export async function logMessage(
 
 // ── Army sheet helpers ─────────────────────────────────────────────────────
 
-// TODO(eric): Update these cell references to match your army sheet template.
-// The bot writes army stats to these named cells on the "Stats" tab.
-const ARMY_SHEET_CELLS = {
-  INFANTRY: 'Stats!B2',
-  CAVALRY: 'Stats!B3',
-  WAGONS: 'Stats!B4',
-  NONCOMBATANTS: 'Stats!B5',
-  MORALE: 'Stats!B6',
-  RESTING_MORALE: 'Stats!B7',
-  SUPPLIES: 'Stats!B8',
-  COIN: 'Stats!B9',
-  GOODS: 'Stats!B10',
-  HEX: 'Stats!B11',
-  STANCE: 'Stats!B12',
-  // Sheet-calculated; bot reads these in, does not write them.
-  INFANTRY_STRENGTH: 'Stats!B13',
-  CAVALRY_STRENGTH: 'Stats!B14',
-  SCOUTING_RANGE: 'Stats!B15',
-};
+export async function fetchArmyStats(sheetId: string): Promise<ArmySheetStats> {
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: ARMY_SHEET_CELLS.ALL_STATS,
+  });
+  return parseSheetStats((res.data.values ?? []) as (string | number | null)[][]);
+}
 
-export async function syncArmySheet(sheetId: string, army: ArmyRow): Promise<void> {
+export async function syncArmySheet(
+  sheetId: string,
+  stats: ArmySheetStats,
+  hexQ: number,
+  hexR: number,
+): Promise<void> {
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
   const data = [
-    { range: ARMY_SHEET_CELLS.INFANTRY, values: [[army.infantry]] },
-    { range: ARMY_SHEET_CELLS.CAVALRY, values: [[army.cavalry]] },
-    { range: ARMY_SHEET_CELLS.WAGONS, values: [[army.wagons]] },
-    { range: ARMY_SHEET_CELLS.NONCOMBATANTS, values: [[army.noncombatants]] },
-    { range: ARMY_SHEET_CELLS.MORALE, values: [[army.morale]] },
-    { range: ARMY_SHEET_CELLS.RESTING_MORALE, values: [[army.resting_morale]] },
-    { range: ARMY_SHEET_CELLS.SUPPLIES, values: [[army.supplies]] },
-    { range: ARMY_SHEET_CELLS.COIN, values: [[army.coin]] },
-    { range: ARMY_SHEET_CELLS.GOODS, values: [[army.goods]] },
-    { range: ARMY_SHEET_CELLS.HEX, values: [[`${army.hex_q},${army.hex_r}`]] },
-    { range: ARMY_SHEET_CELLS.STANCE, values: [[army.stance]] },
+    { range: ARMY_SHEET_CELLS.INFANTRY, values: [[stats.infantry]] },
+    { range: ARMY_SHEET_CELLS.CAVALRY, values: [[stats.cavalry]] },
+    { range: ARMY_SHEET_CELLS.WAGONS, values: [[stats.wagons]] },
+    { range: ARMY_SHEET_CELLS.NONCOMBATANTS, values: [[stats.noncombatants]] },
+    { range: ARMY_SHEET_CELLS.MORALE, values: [[stats.morale]] },
+    { range: ARMY_SHEET_CELLS.RESTING_MORALE, values: [[stats.resting_morale]] },
+    { range: ARMY_SHEET_CELLS.SUPPLIES, values: [[stats.supplies]] },
+    { range: ARMY_SHEET_CELLS.COIN, values: [[stats.coin]] },
+    { range: ARMY_SHEET_CELLS.GOODS, values: [[stats.goods]] },
+    { range: ARMY_SHEET_CELLS.HEX, values: [[`${hexQ},${hexR}`]] },
+    { range: ARMY_SHEET_CELLS.STANCE, values: [[stats.stance]] },
+    { range: ARMY_SHEET_CELLS.MAX_MORALE, values: [[stats.max_morale]] },
+    { range: ARMY_SHEET_CELLS.FORCED_MARCH, values: [[stats.forced_march ? 1 : 0]] },
+    { range: ARMY_SHEET_CELLS.NIGHT_MARCH, values: [[stats.night_march ? 1 : 0]] },
+    // Infantry Strength, Cavalry Strength, Scouting Range (B13–B15) are sheet-calculated; not written.
   ];
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: sheetId,
@@ -194,19 +271,48 @@ export async function syncArmySheet(sheetId: string, army: ArmyRow): Promise<voi
   });
 }
 
+export async function writeStance(sheetId: string, stance: 'allow' | 'block'): Promise<void> {
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: ARMY_SHEET_CELLS.STANCE,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[stance]] },
+  });
+}
+
+export async function writePace(
+  sheetId: string,
+  forcedMarch: boolean,
+  nightMarch: boolean,
+): Promise<void> {
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: ARMY_SHEET_CELLS.FORCED_MARCH, values: [[forcedMarch ? 1 : 0]] },
+        { range: ARMY_SHEET_CELLS.NIGHT_MARCH, values: [[nightMarch ? 1 : 0]] },
+      ],
+    },
+  });
+}
 
 export async function syncAllArmySheets(
   commanders: CommanderRow[],
-  armies: ArmyRow[],
+  armies: { id: number; commander_id: number; hex_q: number; hex_r: number }[],
+  statsMap: Map<number, ArmySheetStats>,
 ): Promise<void> {
   const armyByCommander = new Map(armies.map((a) => [a.commander_id, a]));
   for (const commander of commanders) {
     if (!commander.army_sheet_url) continue;
     const army = armyByCommander.get(commander.id);
     if (!army) continue;
-    // Extract sheet ID from URL
-    const match = commander.army_sheet_url.match(/\/d\/([^/]+)/);
-    if (!match) continue;
-    await syncArmySheet(match[1], army);
+    const sheetId = extractSheetId(commander.army_sheet_url);
+    if (!sheetId) continue;
+    const stats = statsMap.get(army.id);
+    if (!stats) continue;
+    await syncArmySheet(sheetId, stats, army.hex_q, army.hex_r);
   }
 }

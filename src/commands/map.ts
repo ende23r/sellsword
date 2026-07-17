@@ -1,6 +1,7 @@
 import { AttachmentBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import { getAllHexes, getAllStrongholds, getArmyByDiscordId } from '../lib/db.js';
+import { getAllHexes, getAllStrongholds, getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
 import db from '../lib/db.js';
+import { extractSheetId, fetchArmyStats } from '../lib/sheets.js';
 import { getArmiesForMap, getPlayerMapHexes, renderMap } from '../lib/map-render.js';
 import type { Command } from '../types.js';
 
@@ -41,8 +42,10 @@ const map: Command = {
         return;
       }
 
-      // Scouting range: 1 hex normally, 2 hexes with cavalry; fog border adds 1 more ring
-      const scoutRange = army.cavalry > 0 ? 2 : 1;
+      const commander = getCommanderByDiscordId(interaction.user.id);
+      const sheetId = extractSheetId(commander?.army_sheet_url);
+      const armyStats = sheetId ? await fetchArmyStats(sheetId) : null;
+      const scoutRange = armyStats?.scouting_range ?? 1;
       ({ hexes: renderHexes, visibleCoords } = getPlayerMapHexes(
         hexes,
         { q: army.hex_q, r: army.hex_r },

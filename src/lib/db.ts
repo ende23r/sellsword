@@ -18,16 +18,18 @@ db.exec(DB_SCHEMA);
   }
 }
 
-// Migration: add infantry_strength, cavalry_strength, scouting_range to armies if absent.
+// Migration: remove stat columns from armies (now in Google Sheets).
 {
   const armiesCols = db.pragma('table_info(armies)') as { name: string }[];
   const names = new Set(armiesCols.map((c) => c.name));
-  if (!names.has('infantry_strength'))
-    db.exec('ALTER TABLE armies ADD COLUMN infantry_strength INTEGER NOT NULL DEFAULT 0');
-  if (!names.has('cavalry_strength'))
-    db.exec('ALTER TABLE armies ADD COLUMN cavalry_strength INTEGER NOT NULL DEFAULT 0');
-  if (!names.has('scouting_range'))
-    db.exec('ALTER TABLE armies ADD COLUMN scouting_range INTEGER NOT NULL DEFAULT 1');
+  const statCols = [
+    'infantry', 'infantry_strength', 'cavalry', 'cavalry_strength',
+    'wagons', 'noncombatants', 'scouting_range', 'morale', 'resting_morale',
+    'max_morale', 'supplies', 'coin', 'goods', 'forced_march', 'night_march', 'stance',
+  ];
+  for (const col of statCols) {
+    if (names.has(col)) db.exec(`ALTER TABLE armies DROP COLUMN ${col}`);
+  }
 }
 
 // Migrations for factions table.
@@ -94,22 +96,6 @@ export type ArmyRow = {
   name: string | null;
   hex_q: number;
   hex_r: number;
-  infantry: number;
-  infantry_strength: number;
-  cavalry: number;
-  cavalry_strength: number;
-  wagons: number;
-  noncombatants: number;
-  scouting_range: number;
-  morale: number;
-  resting_morale: number;
-  max_morale: number;
-  supplies: number;
-  coin: number;
-  goods: number;
-  forced_march: number;
-  night_march: number;
-  stance: 'allow' | 'block';
 };
 
 export type FactionRow = {
@@ -183,10 +169,6 @@ export function getPendingOrders(type?: string): OrderRow[] {
 
 export function markOrderProcessed(orderId: number): void {
   db.prepare("UPDATE orders SET processed_at = datetime('now') WHERE id = ?").run(orderId);
-}
-
-export function getDailySuppplyConsumption(army: ArmyRow): number {
-  return army.infantry + army.noncombatants + (army.cavalry + army.wagons) * 10;
 }
 
 export default db;

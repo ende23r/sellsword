@@ -1,5 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId } from '../lib/db.js';
+import { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
+import { extractSheetId, writePace } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const pace: Command = {
@@ -26,14 +27,17 @@ const pace: Command = {
       return;
     }
 
+    const commander = getCommanderByDiscordId(interaction.user.id);
+    const sheetId = extractSheetId(commander?.army_sheet_url);
+    if (!sheetId) {
+      await interaction.reply({ content: 'Your army has no sheet configured.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
     const forced = interaction.options.getBoolean('forced_march', true);
     const night = interaction.options.getBoolean('night_march', true);
 
-    db.prepare('UPDATE armies SET forced_march = ?, night_march = ? WHERE id = ?').run(
-      forced ? 1 : 0,
-      night ? 1 : 0,
-      army.id,
-    );
+    await writePace(sheetId, forced, night);
 
     const flags = [forced && '**forced march**', night && '**night march**'].filter(Boolean);
     const summary = flags.length > 0 ? flags.join(' + ') : '**standard pace**';
