@@ -122,6 +122,7 @@ export function processForage(
 
     let totalYield = 0;
     let exhaustedCount = 0;
+    let revoltCount = 0;
 
     for (const coord of hexCoords) {
       const hex = database
@@ -133,6 +134,7 @@ export function processForage(
         continue;
       }
 
+      if (hex.forage_count >= 1) revoltCount++;
       totalYield += hex.settlement * 500;
       database
         .prepare(
@@ -155,6 +157,12 @@ export function processForage(
         `⚠️ **${army.name ?? army.id}** foraged but found nothing` +
           (exhaustedCount > 0 ? ` (${exhaustedCount} exhausted hex${exhaustedCount > 1 ? 'es' : ''})` : '') +
           `.`,
+      );
+    }
+
+    if (revoltCount > 0) {
+      log.push(
+        `⚠️ **Revolt risk:** **${army.name ?? army.id}** foraged ${revoltCount} previously-foraged hex${revoltCount > 1 ? 'es' : ''}.`,
       );
     }
 

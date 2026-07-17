@@ -238,6 +238,28 @@ describe('processForage', () => {
     };
     expect(hex.forage_count).toBe(1);
   });
+
+  it('logs revolt risk when any foraged hex has been foraged before', () => {
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, infantry: 0 });
+    seedHex(db, 0, 0, { settlement: 100, forage_count: 1 });
+    seedOrder(db, armyId, 'forage');
+
+    const log: string[] = [];
+    processForage(db, log, new Set());
+
+    expect(log.some((l) => l.toLowerCase().includes('revolt'))).toBe(true);
+  });
+
+  it('does not log revolt risk when all foraged hexes are fresh', () => {
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0, infantry: 0 });
+    seedHex(db, 0, 0, { settlement: 100, forage_count: 0 });
+    seedOrder(db, armyId, 'forage');
+
+    const log: string[] = [];
+    processForage(db, log, new Set());
+
+    expect(log.some((l) => l.toLowerCase().includes('revolt'))).toBe(false);
+  });
 });
 
 // ── processMovement ───────────────────────────────────────────────────────────

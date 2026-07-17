@@ -1,7 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId, getHex, type HexRow } from '../lib/db.js';
 import { hexesInRange } from '../lib/hex.js';
-import { notifyAdmin } from '../lib/admin-notify.js';
 import type { Command } from '../types.js';
 
 const forage: Command = {
@@ -28,7 +27,6 @@ const forage: Command = {
 
     let totalYield = 0;
     let exhaustedCount = 0;
-    const revoltHexes: HexRow[] = [];
 
     for (const coord of coords) {
       const hex = db
@@ -40,7 +38,6 @@ const forage: Command = {
         continue;
       }
       totalYield += hex.settlement * 500;
-      if (hex.forage_count >= 1) revoltHexes.push(hex);
     }
 
     // One live order at a time: cancel any existing move or forage order
@@ -53,21 +50,11 @@ const forage: Command = {
     );
 
     const rangeLabel = range === 2 ? `2-hex cavalry range (${coords.length} hexes)` : `1-hex range (${coords.length} hexes)`;
-    let msg =
+    const msg =
       `✅ Forage order queued for the next night update.\n` +
       `**Area:** ${rangeLabel} around (${army.hex_q},${army.hex_r})\n` +
       `**Potential yield:** ${totalYield.toLocaleString()} supplies` +
       (exhaustedCount > 0 ? ` (${exhaustedCount} exhausted hex${exhaustedCount > 1 ? 'es' : ''} skipped)` : '');
-
-    if (revoltHexes.length > 0) {
-      msg += `\n\n⚠️ ${revoltHexes.length} hex${revoltHexes.length > 1 ? 'es' : ''} in range ${revoltHexes.length > 1 ? 'have' : 'has'} been foraged before — revolt risk is elevated. Admin has been notified.`;
-      await notifyAdmin(
-        interaction.client,
-        `⚠️ **Revolt risk:** ${interaction.user} queued a forage order. ` +
-          `${revoltHexes.map((h) => `(${h.q},${h.r}) foraged ${h.forage_count}×`).join(', ')}. ` +
-          `Army: **${army.name ?? army.id}**.`,
-      );
-    }
 
     await interaction.reply(msg);
   },
