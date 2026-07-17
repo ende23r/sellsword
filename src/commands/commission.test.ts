@@ -1,0 +1,96 @@
+import { ChannelType } from 'discord.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { notifyAdmin } from '../lib/admin-notify.js';
+import { upsertFaction } from '../lib/faction-ops.js';
+
+vi.mock('../lib/admin-notify.js', () => ({ notifyAdmin: vi.fn() }));
+vi.mock('../lib/faction-ops.js', () => ({ upsertFaction: vi.fn().mockReturnValue(1) }));
+
+const mockArmyGet = vi.hoisted(() => vi.fn().mockReturnValue(null));
+const mockCommanderGet = vi.hoisted(() => vi.fn().mockReturnValue({ id: 1 }));
+const mockRun = vi.hoisted(() => vi.fn());
+
+vi.mock('../lib/db.js', () => ({
+  default: {
+    prepare: vi.fn((sql: string) => {
+      if (sql.includes('FROM armies') && sql.includes('JOIN commanders'))
+        return { get: mockArmyGet };
+      if (sql.includes('FROM commanders'))
+        return { get: mockCommanderGet };
+      return { run: mockRun };
+    }),
+  },
+}));
+
+const mockCategory = { id: 'cat-1', type: ChannelType.GuildCategory, name: 'Blue' };
+const mockChannel = { id: 'ch-1', send: vi.fn().mockResolvedValue(undefined), toString: () => '#army-blue-1st' };
+const mockCreateChannel = vi.hoisted(() => vi.fn());
+
+vi.mock('discord.js', async (importActual) => {
+  const actual = await importActual<typeof import('discord.js')>();
+  return { ...actual };
+});
+
+function makeInteraction() {
+  return {
+    options: {
+      getUser: vi.fn().mockReturnValue({ id: 'user-1', username: 'alice' }),
+      getRole: vi.fn().mockReturnValue({ id: 'role-1', name: 'Blue' }),
+      getString: vi.fn().mockImplementation((key: string) =>
+        key === 'army_name' ? 'Blue 1st' : null,
+      ),
+      getInteger: vi.fn().mockReturnValue(0),
+    },
+    guild: {
+      roles: { everyone: { id: 'everyone-role' } },
+      channels: {
+        cache: { find: vi.fn().mockReturnValue(mockCategory) },
+        create: mockCreateChannel,
+      },
+    },
+    client: {},
+    deferReply: vi.fn().mockResolvedValue(undefined),
+    editReply: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+describe('/commission', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockArmyGet.mockReturnValue(null);
+    mockCommanderGet.mockReturnValue({ id: 1 });
+    mockCreateChannel.mockResolvedValue(mockChannel);
+  });
+
+  it('rejects if the player already has an army', async () => {
+    mockArmyGet.mockReturnValue({ id: 99 });
+    const { default: command } = await import('./commission.js');
+    const interaction = makeInteraction();
+    await command.execute(interaction as any);
+    expect(mockCreateChannel).not.toHaveBeenCalled();
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('already has an army'),
+    );
+  });
+
+  it('commissions a player who has no army', async () => {
+    const { default: command } = await import('./commission.js');
+    const interaction = makeInteraction();
+    await command.execute(interaction as any);
+    expect(mockCreateChannel).toHaveBeenCalled();
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('✅'),
+    );
+  });
+
+  it('rejects if no faction category exists', async () => {
+    const { default: command } = await import('./commission.js');
+    const interaction = makeInteraction();
+    (interaction.guild.channels.cache.find as any).mockReturnValue(undefined);
+    await command.execute(interaction as any);
+    expect(mockCreateChannel).not.toHaveBeenCalled();
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('No Discord category'),
+    );
+  });
+});

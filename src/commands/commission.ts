@@ -57,6 +57,20 @@ const commission: Command = {
       return;
     }
 
+    const existingArmy = db
+      .prepare(
+        `SELECT a.id FROM armies a
+         JOIN commanders c ON c.id = a.commander_id
+         WHERE c.discord_user_id = ?`,
+      )
+      .get(commanderUser.id);
+    if (existingArmy) {
+      await interaction.editReply(
+        `**${commanderUser.username}** already has an army. Use \`/drop-army\` first if you want to recommission them.`,
+      );
+      return;
+    }
+
     const channelName = armyName.toLowerCase().replace(/[^a-z0-9]/g, '-');
     const channel = await guild.channels.create({
       name: `army-${channelName}`,
