@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import { armyInitials, getArmiesForMap, getPlayerMapHexes, trianglePoints } from './map-render.js';
+import { armyInitials, armyRingOffsets, getArmiesForMap, getPlayerMapHexes, trianglePoints } from './map-render.js';
 import type { HexRow } from './db.js';
 
 function makeHex(q: number, r: number): HexRow {
@@ -139,6 +139,38 @@ describe('getPlayerMapHexes', () => {
       { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 }].map(({ q, r }) => makeHex(q, r));
     const { hexes } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 1);
     expect(hexes.length).toBe(7); // fog ring hexes don't exist, so nothing added
+  });
+});
+
+describe('armyRingOffsets', () => {
+  it('returns a single [0,0] offset for one army', () => {
+    const offsets = armyRingOffsets(1, 20);
+    expect(offsets).toHaveLength(1);
+    expect(offsets[0][0]).toBeCloseTo(0);
+    expect(offsets[0][1]).toBeCloseTo(0);
+  });
+
+  it('returns N offsets for N armies', () => {
+    expect(armyRingOffsets(4, 20)).toHaveLength(4);
+  });
+
+  it('all offsets for count > 1 lie exactly on the ring radius', () => {
+    const r = 20;
+    for (const [dx, dy] of armyRingOffsets(3, r)) {
+      expect(Math.hypot(dx, dy)).toBeCloseTo(r);
+    }
+  });
+
+  it('first offset points straight up (negative y) for count > 1', () => {
+    const [[dx, dy]] = armyRingOffsets(2, 20);
+    expect(dx).toBeCloseTo(0);
+    expect(dy).toBeCloseTo(-20);
+  });
+
+  it('two armies are positioned opposite each other', () => {
+    const [[dx0, dy0], [dx1, dy1]] = armyRingOffsets(2, 20);
+    expect(dx0 + dx1).toBeCloseTo(0);
+    expect(dy0 + dy1).toBeCloseTo(0);
   });
 });
 

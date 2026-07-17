@@ -200,19 +200,32 @@ export async function renderMap(
     }
   }
 
-  // Army markers
+  // Army markers — group by hex so multiple armies offset into a ring
   if (options.armyPositions) {
+    const armiesByHex = new Map<string, ArmyMarker[]>();
     for (const army of options.armyPositions) {
-      const coordKey = `${army.hex_q},${army.hex_r}`;
+      const key = `${army.hex_q},${army.hex_r}`;
+      if (!armiesByHex.has(key)) armiesByHex.set(key, []);
+      armiesByHex.get(key)!.push(army);
+    }
+
+    for (const [coordKey, armiesInHex] of armiesByHex) {
       if (options.visibleCoords && !options.visibleCoords.has(coordKey)) continue;
-      const [cx, cy] = hexToPixel({ q: army.hex_q, r: army.hex_r }, size, -minX, -minY);
-      const fill = army.faction_color ?? '#e63';
-      const initials = armyInitials(army.name);
-      const r = 15;
-      labels.push(
-        `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r}" fill="${fill}" stroke="#fff" stroke-width="1.5"/>`,
-        `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" fill="#fff" font-family="monospace">${initials}</text>`,
-      );
+      const [hex_q, hex_r] = coordKey.split(',').map(Number);
+      const [cx, cy] = hexToPixel({ q: hex_q, r: hex_r }, size, -minX, -minY);
+      const offsets = armyRingOffsets(armiesInHex.length, size * 0.3);
+      const markerR = 15;
+
+      armiesInHex.forEach((army, i) => {
+        const ax = cx + offsets[i][0];
+        const ay = cy + offsets[i][1];
+        const fill = army.faction_color ?? '#e63';
+        const initials = armyInitials(army.name);
+        labels.push(
+          `<circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${markerR}" fill="${fill}" stroke="#fff" stroke-width="1.5"/>`,
+          `<text x="${ax.toFixed(1)}" y="${ay.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" fill="#fff" font-family="monospace">${initials}</text>`,
+        );
+      });
     }
   }
 
@@ -229,6 +242,15 @@ export async function renderMap(
 
   const resvg = new Resvg(svg, { fitTo: { mode: 'original' } });
   return Buffer.from(resvg.render().asPng());
+}
+
+// Returns [dx, dy] offsets for N army markers. Single army stays at center; multiple spread on a ring.
+export function armyRingOffsets(count: number, ringRadius: number): Array<[number, number]> {
+  if (count === 1) return [[0, 0]];
+  return Array.from({ length: count }, (_, i) => {
+    const angle = (Math.PI / 180) * (-90 + i * (360 / count));
+    return [ringRadius * Math.cos(angle), ringRadius * Math.sin(angle)];
+  });
 }
 
 // North-pointing pentagon: first vertex at -90° (top), then every 72°
