@@ -12,7 +12,42 @@
 
 import { readFileSync } from 'fs';
 import { google } from 'googleapis';
+import type Database from 'better-sqlite3';
 import type { ArmyRow, CommanderRow } from './db.js';
+
+// ── Army sheet stats (sheet-calculated; bot reads, does not write) ─────────────
+
+export type ArmySheetStats = {
+  infantry_strength: number;
+  cavalry_strength: number;
+  scouting_range: number;
+};
+
+export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetStats {
+  const cell = (row: (string | number | null)[] | undefined): string | number | null =>
+    row?.[0] ?? null;
+  const num = (v: string | number | null, fallback: number): number => {
+    const n = Number(v);
+    return v !== null && v !== '' && !isNaN(n) ? Math.round(n) : fallback;
+  };
+  return {
+    infantry_strength: num(cell(rows[0]), 0),
+    cavalry_strength: num(cell(rows[1]), 0),
+    scouting_range: num(cell(rows[2]), 1),
+  };
+}
+
+export function applySheetStats(
+  database: Database.Database,
+  armyId: number,
+  { infantry_strength, cavalry_strength, scouting_range }: ArmySheetStats,
+): void {
+  database
+    .prepare(
+      'UPDATE armies SET infantry_strength = ?, cavalry_strength = ?, scouting_range = ? WHERE id = ?',
+    )
+    .run(infantry_strength, cavalry_strength, scouting_range, armyId);
+}
 
 let _auth: InstanceType<typeof google.auth.GoogleAuth> | null = null;
 
