@@ -39,6 +39,14 @@ const move: Command = {
       return;
     }
 
+    if (destHex.speed === 0) {
+      await interaction.reply({
+        content: `Hex (${destQ},${destR}) is impassable terrain (${destHex.terrain}).`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     if (destQ === army.hex_q && destR === army.hex_r) {
       db.prepare(
         "DELETE FROM orders WHERE army_id = ? AND type IN ('move', 'forage') AND processed_at IS NULL",
