@@ -166,7 +166,7 @@ export async function renderMap(
     // Stronghold
     const stronghold = strongholdByHexId.get(hex.id);
     if (stronghold) {
-      const nameLine = `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.65).toFixed(1)}" text-anchor="middle" font-size="17" fill="#111" font-weight="bold" font-family="sans-serif">${stronghold.name}</text>`;
+      const nameLine = `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.65).toFixed(1)}" text-anchor="middle" font-size="17" fill="#111" font-weight="bold" font-family="sans-serif" stroke="white" stroke-width="3" paint-order="stroke">${stronghold.name}</text>`;
       if (stronghold.type === 'city') {
         const r = size * 0.28;
         const pcy = cy - size * 0.1;
