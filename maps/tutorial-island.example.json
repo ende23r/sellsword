@@ -140,6 +140,7 @@
       "r": 3,
       "terrain": "coast",
       "settlement": 80,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -203,6 +204,7 @@
       "r": 0,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -211,6 +213,7 @@
       "r": -1,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -219,6 +222,7 @@
       "r": -1,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -227,6 +231,7 @@
       "r": -1,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -235,6 +240,7 @@
       "r": -1,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -243,6 +249,7 @@
       "r": -1,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -251,6 +258,7 @@
       "r": 1,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -259,6 +267,7 @@
       "r": 2,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -267,6 +276,7 @@
       "r": 3,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -275,6 +285,7 @@
       "r": 4,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -283,6 +294,7 @@
       "r": 5,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -291,6 +303,7 @@
       "r": 5,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -299,6 +312,7 @@
       "r": 5,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -307,6 +321,7 @@
       "r": 5,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -315,6 +330,7 @@
       "r": 5,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -323,6 +339,7 @@
       "r": 0,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -331,6 +348,7 @@
       "r": 1,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -339,6 +357,7 @@
       "r": 2,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -347,6 +366,7 @@
       "r": 3,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     },
@@ -355,6 +375,7 @@
       "r": 4,
       "terrain": "sea",
       "settlement": 0,
+      "speed": 0,
       "roads": [],
       "rivers": []
     }
