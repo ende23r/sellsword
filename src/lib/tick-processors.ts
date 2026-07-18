@@ -10,6 +10,28 @@ import { findPath, hexesInRange } from './hex.js';
 
 type Log = string[];
 
+// ── Position validation (every tick) ─────────────────────────────────────────
+
+// The army sheet is the source of truth for position, and GMs edit it by hand.
+// An army whose Hex cell points off the map is dropped from the tick entirely —
+// no movement, no supply consumption, no sheet sync — so the bot never acts on
+// (or overwrites) a position it can't trust.
+export function validateArmyPositions(
+  database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
+  log: Log,
+): void {
+  const hexExists = database.prepare('SELECT 1 FROM hexes WHERE q = ? AND r = ?');
+  for (const [armyId, s] of stats) {
+    if (!hexExists.get(s.hex_q, s.hex_r)) {
+      log.push(
+        `⚠️ Sheet for army ${armyId} has position (${s.hex_q},${s.hex_r}), which is not on the map — army skipped this tick. Fix the Hex cell.`,
+      );
+      stats.delete(armyId);
+    }
+  }
+}
+
 // ── Supply consumption (morning tick) ────────────────────────────────────────
 
 export function consumeSupplies(

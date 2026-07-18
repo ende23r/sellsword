@@ -73,7 +73,9 @@ Key lib files:
 - `src/lib/faction-ops.ts` — `upsertFaction()` for writing to the factions table (injectable DB, used by seed script and commands)
 - `src/lib/faction-sync.ts` — `syncFactions()` creates missing Discord roles/categories and upserts factions into the DB; used by `npm run seed-factions`
 
-Discord commands (in `src/commands/`): `/queue`, `/unqueue`, `/recruit`, `/commission`, `/retire`, `/move`, `/forage`, `/pace`, `/stance`, `/transfer`, `/message`, `/gmping`, `/map`, `/list-armies`, `/drop-army`, `/drop-message`, `/roll`, `/ticknow` (admin), `/teleport` (admin), `/battle` (admin)
+Discord commands (in `src/commands/`): `/queue`, `/unqueue`, `/recruit`, `/commission`, `/retire`, `/move`, `/forage`, `/pace`, `/stance`, `/transfer`, `/message`, `/gmping`, `/map`, `/list-armies`, `/drop-army`, `/drop-message`, `/roll`, `/ticknow` (admin), `/battle` (admin)
+
+Army position lives only in the army sheet's Hex cell (no DB column) — GMs reposition armies by editing the sheet directly; there is deliberately no admin command for it. The bot validates on every tick: a malformed Hex cell fails that army's stats fetch with a clear error, and an off-map position drops the army from the tick with a warning, both reported to the admin channel.
 
 ## Game Domain (for implementing bot logic)
 

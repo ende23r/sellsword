@@ -36,7 +36,7 @@ function formatAdminMessage(outcome: BattleOutcome): string {
     const loserLineStr = `💀 **${loser.name}** — ${outcome.loserCasualtyPct}% casualties${outcome.loserMoraleDelta !== 0 ? `, morale ${sign(outcome.loserMoraleDelta)}` : ''}${captureStr}`;
     lines.push(victorLine, loserLineStr);
     if (impossible) lines.push(`⚡ Impossible battle — extra casualties applied, no morale gain for victor.`);
-    lines.push(`⚠️ **${loser.name}** must retreat 1 hex. Use \`/teleport\` to move them.`);
+    lines.push(`⚠️ **${loser.name}** must retreat 1 hex. Edit the Hex cell on their army sheet to move them.`);
     if (outcome.attackerPenalty) {
       const attacker = winner === 'a' ? sideB : sideA;
       lines.push(`📉 **${attacker.name}** (attacker) loses 1 additional morale.`);

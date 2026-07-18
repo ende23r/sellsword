@@ -9,6 +9,7 @@ import {
   processForage,
   processMovement,
   processNightMarchMovement,
+  validateArmyPositions,
 } from './tick-processors.js';
 
 export type UpdatePhase = 'morning' | 'noon' | 'night';
@@ -24,6 +25,7 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
   const client = adminChannel.client;
 
   const statsMap = await fetchAllArmyStats(log);
+  validateArmyPositions(db, statsMap, log);
 
   if (phase === 'morning') {
     processNightMarchMovement(db, statsMap, log);

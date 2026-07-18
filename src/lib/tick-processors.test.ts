@@ -12,6 +12,7 @@ import {
   processNightMarchMovement,
   rollMarchMorale,
   supplyColor,
+  validateArmyPositions,
 } from './tick-processors.js';
 
 function makeDb() {
@@ -102,6 +103,44 @@ function seedOrder(
   );
   return (db.prepare('SELECT last_insert_rowid() AS id').get() as { id: number }).id;
 }
+
+// ── validateArmyPositions ─────────────────────────────────────────────────────
+
+describe('validateArmyPositions', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+  });
+
+  it('keeps armies whose sheet position is on the map', () => {
+    const id = seedArmy(db);
+    seedHex(db, 3, -2);
+    const stats = new Map([[id, makeStats({ hex_q: 3, hex_r: -2 })]]);
+    const log: string[] = [];
+    validateArmyPositions(db, stats, log);
+    expect(stats.has(id)).toBe(true);
+    expect(log).toEqual([]);
+  });
+
+  it('drops armies whose sheet position is off the map and warns', () => {
+    const goodId = seedArmy(db);
+    const badId = seedArmy(db);
+    seedHex(db, 0, 0);
+    const stats = new Map([
+      [goodId, makeStats({ hex_q: 0, hex_r: 0 })],
+      [badId, makeStats({ hex_q: 99, hex_r: 99 })],
+    ]);
+    const log: string[] = [];
+    validateArmyPositions(db, stats, log);
+    expect(stats.has(goodId)).toBe(true);
+    expect(stats.has(badId)).toBe(false);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toContain(`army ${badId}`);
+    expect(log[0]).toContain('(99,99)');
+  });
+});
 
 // ── consumeSupplies ───────────────────────────────────────────────────────────
 

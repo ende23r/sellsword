@@ -101,6 +101,19 @@ describe('parseSheetStats', () => {
     expect(stats.hex_r).toBe(0);
   });
 
+  it('accepts whitespace around hex coordinates', () => {
+    const stats = parseSheetStats(makeRows({ 9: ' 4 , -1 ' }));
+    expect(stats.hex_q).toBe(4);
+    expect(stats.hex_r).toBe(-1);
+  });
+
+  it('throws a clear error when the hex cell is malformed', () => {
+    expect(() => parseSheetStats(makeRows({ 9: '12.4' }))).toThrow(/Hex cell "12\.4"/);
+    expect(() => parseSheetStats(makeRows({ 9: 'abc' }))).toThrow(/expected "q,r"/);
+    expect(() => parseSheetStats(makeRows({ 9: '3,' }))).toThrow(/Hex cell "3,"/);
+    expect(() => parseSheetStats(makeRows({ 9: '3,x' }))).toThrow(/expected "q,r"/);
+  });
+
   it('defaults numeric fields to 0 when cells are empty', () => {
     const stats = parseSheetStats(makeRows({ 0: null, 1: '', 6: null }));
     expect(stats.infantry).toBe(0);

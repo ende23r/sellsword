@@ -105,11 +105,17 @@ export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetSt
     const s = String(v ?? '').trim().toLowerCase();
     return s === 'engage' || s === 'block' ? 'engage' : 'allow_passage';
   };
+  // Empty cell means a fresh sheet (position not set yet) — default to (0,0).
+  // Anything else must parse exactly, so a GM's typo is reported instead of
+  // silently landing the army on hex (0,0).
   const parseHex = (v: string | number | null): { q: number; r: number } => {
-    const parts = String(v ?? '').split(',');
-    const q = parseInt(parts[0] ?? '', 10);
-    const r = parseInt(parts[1] ?? '', 10);
-    return { q: isNaN(q) ? 0 : q, r: isNaN(r) ? 0 : r };
+    const raw = String(v ?? '').trim();
+    if (raw === '') return { q: 0, r: 0 };
+    const match = raw.match(/^(-?\d+)\s*,\s*(-?\d+)$/);
+    if (!match) {
+      throw new Error(`Hex cell "${raw}" is invalid — expected "q,r" (e.g. "3,-2").`);
+    }
+    return { q: parseInt(match[1], 10), r: parseInt(match[2], 10) };
   };
 
   const hex = parseHex(cell(rows[ROW.HEX]));
