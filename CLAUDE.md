@@ -20,6 +20,7 @@ npm run seed -- --clear maps/foo.json # wipe map data then seed fresh
 npm run clear-map                      # wipe all hex and stronghold data, no reseed
 npm run seed-factions                          # seed from faction-seed.json
 npm run seed-factions -- factions/my-game.json # seed from a specific file
+npm run check-sheet -- <sheet URL or ID>       # validate an army sheet's named ranges and print its stats
 npm test             # run all tests (vitest)
 npm run typecheck    # type-check without emitting
 npm run lint         # lint with ESLint (recommended rules; Prettier owns formatting)
@@ -75,7 +76,9 @@ Key lib files:
 
 Discord commands (in `src/commands/`): `/queue`, `/unqueue`, `/recruit`, `/commission`, `/retire`, `/move`, `/forage`, `/pace`, `/stance`, `/transfer`, `/message`, `/gmping`, `/map`, `/list-armies`, `/drop-army`, `/drop-message`, `/roll`, `/ticknow` (admin), `/battle` (admin)
 
-Army position lives only in the army sheet's Hex cell (no DB column) — GMs reposition armies by editing the sheet directly; there is deliberately no admin command for it. The bot validates on every tick: a malformed Hex cell fails that army's stats fetch with a clear error, and an off-map position drops the army from the tick with a warning, both reported to the admin channel.
+Army stats live in Google Sheets, not the DB. The contract between the bot and a sheet is the 17 **named ranges** listed in `STAT_RANGE_NAMES` (`src/lib/sheets.ts`), named exactly after the `ArmySheetStats` keys (`infantry`, `morale`, `hex`, …). GMs define them once via Data → Named ranges and can otherwise lay out their sheets however they like — named ranges follow their cell when rows/columns move. `infantry_strength`, `cavalry_strength`, and `scouting_range` are sheet-calculated: the bot reads but never writes them. `npm run check-sheet` is the GM-facing validator.
+
+Army position lives only in the sheet's `hex` named range (no DB column) — GMs reposition armies by editing the sheet directly; there is deliberately no admin command for it. The bot validates on every tick: a missing named range or malformed `hex` cell fails that army's stats fetch with a clear error, and an off-map position drops the army from the tick with a warning, both reported to the admin channel.
 
 ## Game Domain (for implementing bot logic)
 

@@ -1,36 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { parseSheetStats } from './sheets.js';
+import {
+  STAT_RANGE_NAMES,
+  missingStatRanges,
+  parseSheetStats,
+  statWriteData,
+  type StatCells,
+} from './sheets.js';
 
 // ── parseSheetStats ───────────────────────────────────────────────────────────
 
-// Helper: build a 17-row input with defaults, allow any row to be overridden.
-// Rows map to Stats!B2:B18 (17 rows, 0-based index = B-row minus 2).
-function makeRows(overrides: Record<number, string | number | null> = {}): (string | number | null)[][] {
-  const defaults: (string | number | null)[] = [
-    1000,  // 0  infantry
-    200,   // 1  cavalry
-    5,     // 2  wagons
-    50,    // 3  noncombatants
-    9,     // 4  morale
-    9,     // 5  resting_morale
-    5000,  // 6  supplies
-    100,   // 7  coin
-    20,    // 8  goods
-    '0,0', // 9  hex (display only)
-    'allow_passage', // 10 stance
-    900,   // 11 infantry_strength
-    400,   // 12 cavalry_strength
-    2,     // 13 scouting_range
-    12,    // 14 max_morale
-    0,     // 15 forced_march
-    0,     // 16 night_march
-  ];
-  return defaults.map((v, i) => [i in overrides ? overrides[i] : v]);
+// Helper: build a full set of stat cells keyed by named range, allow overrides.
+function makeCells(overrides: Partial<StatCells> = {}): StatCells {
+  return {
+    infantry: 1000,
+    cavalry: 200,
+    wagons: 5,
+    noncombatants: 50,
+    morale: 9,
+    resting_morale: 9,
+    supplies: 5000,
+    coin: 100,
+    goods: 20,
+    hex: '0,0',
+    stance: 'allow_passage',
+    infantry_strength: 900,
+    cavalry_strength: 400,
+    scouting_range: 2,
+    max_morale: 12,
+    forced_march: 0,
+    night_march: 0,
+    ...overrides,
+  };
 }
 
 describe('parseSheetStats', () => {
-  it('parses all fields from a complete row set', () => {
-    const stats = parseSheetStats(makeRows());
+  it('parses all fields from a complete cell set', () => {
+    const stats = parseSheetStats(makeCells());
     expect(stats).toEqual({
       infantry: 1000,
       cavalry: 200,
@@ -54,13 +59,13 @@ describe('parseSheetStats', () => {
   });
 
   it('parses numeric string values', () => {
-    const stats = parseSheetStats(makeRows({ 0: '2000', 1: '800' }));
+    const stats = parseSheetStats(makeCells({ infantry: '2000', cavalry: '800' }));
     expect(stats.infantry).toBe(2000);
     expect(stats.cavalry).toBe(800);
   });
 
-  it('defaults all fields when rows are missing entirely', () => {
-    const stats = parseSheetStats([]);
+  it('defaults all fields when cells are missing entirely', () => {
+    const stats = parseSheetStats({});
     expect(stats).toEqual({
       infantry: 0,
       cavalry: 0,
@@ -84,109 +89,151 @@ describe('parseSheetStats', () => {
   });
 
   it('parses hex_q and hex_r from the hex cell (format "q,r")', () => {
-    const stats = parseSheetStats(makeRows({ 9: '3,-2' }));
+    const stats = parseSheetStats(makeCells({ hex: '3,-2' }));
     expect(stats.hex_q).toBe(3);
     expect(stats.hex_r).toBe(-2);
   });
 
   it('parses negative hex_q coordinate', () => {
-    const stats = parseSheetStats(makeRows({ 9: '-5,3' }));
+    const stats = parseSheetStats(makeCells({ hex: '-5,3' }));
     expect(stats.hex_q).toBe(-5);
     expect(stats.hex_r).toBe(3);
   });
 
   it('defaults hex_q and hex_r to 0 when hex cell is missing', () => {
-    const stats = parseSheetStats(makeRows({ 9: null }));
+    const stats = parseSheetStats(makeCells({ hex: null }));
     expect(stats.hex_q).toBe(0);
     expect(stats.hex_r).toBe(0);
   });
 
   it('accepts whitespace around hex coordinates', () => {
-    const stats = parseSheetStats(makeRows({ 9: ' 4 , -1 ' }));
+    const stats = parseSheetStats(makeCells({ hex: ' 4 , -1 ' }));
     expect(stats.hex_q).toBe(4);
     expect(stats.hex_r).toBe(-1);
   });
 
   it('throws a clear error when the hex cell is malformed', () => {
-    expect(() => parseSheetStats(makeRows({ 9: '12.4' }))).toThrow(/Hex cell "12\.4"/);
-    expect(() => parseSheetStats(makeRows({ 9: 'abc' }))).toThrow(/expected "q,r"/);
-    expect(() => parseSheetStats(makeRows({ 9: '3,' }))).toThrow(/Hex cell "3,"/);
-    expect(() => parseSheetStats(makeRows({ 9: '3,x' }))).toThrow(/expected "q,r"/);
+    expect(() => parseSheetStats(makeCells({ hex: '12.4' }))).toThrow(/Hex cell "12\.4"/);
+    expect(() => parseSheetStats(makeCells({ hex: 'abc' }))).toThrow(/expected "q,r"/);
+    expect(() => parseSheetStats(makeCells({ hex: '3,' }))).toThrow(/Hex cell "3,"/);
+    expect(() => parseSheetStats(makeCells({ hex: '3,x' }))).toThrow(/expected "q,r"/);
   });
 
   it('defaults numeric fields to 0 when cells are empty', () => {
-    const stats = parseSheetStats(makeRows({ 0: null, 1: '', 6: null }));
+    const stats = parseSheetStats(makeCells({ infantry: null, cavalry: '', supplies: null }));
     expect(stats.infantry).toBe(0);
     expect(stats.cavalry).toBe(0);
     expect(stats.supplies).toBe(0);
   });
 
   it('defaults morale to 9 when empty', () => {
-    const stats = parseSheetStats(makeRows({ 4: null }));
+    const stats = parseSheetStats(makeCells({ morale: null }));
     expect(stats.morale).toBe(9);
   });
 
   it('defaults scouting_range to 1 when empty', () => {
-    const stats = parseSheetStats(makeRows({ 13: null }));
+    const stats = parseSheetStats(makeCells({ scouting_range: null }));
     expect(stats.scouting_range).toBe(1);
   });
 
   it('defaults max_morale to 12 when empty', () => {
-    const stats = parseSheetStats(makeRows({ 14: null }));
+    const stats = parseSheetStats(makeCells({ max_morale: null }));
     expect(stats.max_morale).toBe(12);
   });
 
   it('rounds fractional values', () => {
-    const stats = parseSheetStats(makeRows({ 0: '999.7', 4: '8.5' }));
+    const stats = parseSheetStats(makeCells({ infantry: '999.7', morale: '8.5' }));
     expect(stats.infantry).toBe(1000);
     expect(stats.morale).toBe(9);
   });
 
   it('defaults non-numeric strings to safe fallbacks', () => {
-    const stats = parseSheetStats(makeRows({ 0: 'N/A', 4: 'unknown' }));
+    const stats = parseSheetStats(makeCells({ infantry: 'N/A', morale: 'unknown' }));
     expect(stats.infantry).toBe(0);
     expect(stats.morale).toBe(9);
   });
 
   it('parses stance "engage"', () => {
-    expect(parseSheetStats(makeRows({ 10: 'engage' })).stance).toBe('engage');
+    expect(parseSheetStats(makeCells({ stance: 'engage' })).stance).toBe('engage');
   });
 
   it('treats legacy "block" as "engage"', () => {
-    expect(parseSheetStats(makeRows({ 10: 'block' })).stance).toBe('engage');
+    expect(parseSheetStats(makeCells({ stance: 'block' })).stance).toBe('engage');
   });
 
   it('defaults stance to "allow_passage" for unknown values', () => {
-    expect(parseSheetStats(makeRows({ 10: 'invalid' })).stance).toBe('allow_passage');
-    expect(parseSheetStats(makeRows({ 10: null })).stance).toBe('allow_passage');
+    expect(parseSheetStats(makeCells({ stance: 'invalid' })).stance).toBe('allow_passage');
+    expect(parseSheetStats(makeCells({ stance: null })).stance).toBe('allow_passage');
   });
 
   it('parses forced_march as boolean from 1/0', () => {
-    expect(parseSheetStats(makeRows({ 15: 1 })).forced_march).toBe(true);
-    expect(parseSheetStats(makeRows({ 15: 0 })).forced_march).toBe(false);
-    expect(parseSheetStats(makeRows({ 15: '1' })).forced_march).toBe(true);
+    expect(parseSheetStats(makeCells({ forced_march: 1 })).forced_march).toBe(true);
+    expect(parseSheetStats(makeCells({ forced_march: 0 })).forced_march).toBe(false);
+    expect(parseSheetStats(makeCells({ forced_march: '1' })).forced_march).toBe(true);
   });
 
   it('parses forced_march from true/yes strings', () => {
-    expect(parseSheetStats(makeRows({ 15: 'true' })).forced_march).toBe(true);
-    expect(parseSheetStats(makeRows({ 15: 'yes' })).forced_march).toBe(true);
-    expect(parseSheetStats(makeRows({ 15: 'TRUE' })).forced_march).toBe(true);
+    expect(parseSheetStats(makeCells({ forced_march: 'true' })).forced_march).toBe(true);
+    expect(parseSheetStats(makeCells({ forced_march: 'yes' })).forced_march).toBe(true);
+    expect(parseSheetStats(makeCells({ forced_march: 'TRUE' })).forced_march).toBe(true);
   });
 
   it('parses night_march as boolean', () => {
-    expect(parseSheetStats(makeRows({ 16: 1 })).night_march).toBe(true);
-    expect(parseSheetStats(makeRows({ 16: 0 })).night_march).toBe(false);
-    expect(parseSheetStats(makeRows({ 16: null })).night_march).toBe(false);
+    expect(parseSheetStats(makeCells({ night_march: 1 })).night_march).toBe(true);
+    expect(parseSheetStats(makeCells({ night_march: 0 })).night_march).toBe(false);
+    expect(parseSheetStats(makeCells({ night_march: null })).night_march).toBe(false);
+  });
+});
+
+// ── missingStatRanges ─────────────────────────────────────────────────────────
+
+describe('missingStatRanges', () => {
+  it('returns an empty list when every stat range is defined', () => {
+    expect(missingStatRanges([...STAT_RANGE_NAMES])).toEqual([]);
   });
 
-  it('gracefully handles a partial row set (only first 11 rows)', () => {
-    const partial = makeRows().slice(0, 11);
-    const stats = parseSheetStats(partial);
-    expect(stats.infantry_strength).toBe(0);
-    expect(stats.cavalry_strength).toBe(0);
-    expect(stats.scouting_range).toBe(1);
-    expect(stats.max_morale).toBe(12);
-    expect(stats.forced_march).toBe(false);
-    expect(stats.night_march).toBe(false);
+  it('ignores extra named ranges the sheet defines for its own use', () => {
+    expect(missingStatRanges([...STAT_RANGE_NAMES, 'gm_notes', 'battle_history'])).toEqual([]);
+  });
+
+  it('lists every missing stat range', () => {
+    const defined = STAT_RANGE_NAMES.filter((n) => n !== 'morale' && n !== 'hex');
+    expect(missingStatRanges(defined)).toEqual(['morale', 'hex']);
+  });
+
+  it('reports all ranges missing for a sheet with no named ranges', () => {
+    expect(missingStatRanges([])).toEqual([...STAT_RANGE_NAMES]);
+  });
+});
+
+// ── statWriteData ─────────────────────────────────────────────────────────────
+
+describe('statWriteData', () => {
+  const stats = parseSheetStats(makeCells({ hex: '3,-2', forced_march: 1 }));
+
+  it('targets named ranges, one value per range', () => {
+    const data = statWriteData(stats);
+    for (const entry of data) {
+      expect(STAT_RANGE_NAMES).toContain(entry.range);
+      expect(entry.values).toEqual([[expect.anything()]]);
+    }
+  });
+
+  it('writes hex as a single "q,r" cell', () => {
+    const hexEntry = statWriteData(stats).find((d) => d.range === 'hex');
+    expect(hexEntry?.values).toEqual([['3,-2']]);
+  });
+
+  it('writes booleans as 1/0', () => {
+    const data = statWriteData(stats);
+    expect(data.find((d) => d.range === 'forced_march')?.values).toEqual([[1]]);
+    expect(data.find((d) => d.range === 'night_march')?.values).toEqual([[0]]);
+  });
+
+  it('never writes the sheet-calculated read-only ranges', () => {
+    const ranges = statWriteData(stats).map((d) => d.range);
+    expect(ranges).not.toContain('infantry_strength');
+    expect(ranges).not.toContain('cavalry_strength');
+    expect(ranges).not.toContain('scouting_range');
   });
 });

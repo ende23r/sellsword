@@ -43,72 +43,57 @@ export type ArmySheetStats = {
   night_march: boolean;
 };
 
-// TODO(eric): Update these cell references to match your army sheet template.
-// The bot reads and writes army stats to/from these named cells on the "Stats" tab.
-// Column A holds the row labels; column B holds the values.
-export const ARMY_SHEET_CELLS = {
-  INFANTRY: 'Stats!B2',
-  CAVALRY: 'Stats!B3',
-  WAGONS: 'Stats!B4',
-  NONCOMBATANTS: 'Stats!B5',
-  MORALE: 'Stats!B6',
-  RESTING_MORALE: 'Stats!B7',
-  SUPPLIES: 'Stats!B8',
-  COIN: 'Stats!B9',
-  GOODS: 'Stats!B10',
-  HEX: 'Stats!B11',        // display only — bot writes, not read back as stats
-  STANCE: 'Stats!B12',
-  INFANTRY_STRENGTH: 'Stats!B13',   // sheet-calculated; bot reads only
-  CAVALRY_STRENGTH: 'Stats!B14',    // sheet-calculated; bot reads only
-  SCOUTING_RANGE: 'Stats!B15',      // sheet-calculated; bot reads only
-  MAX_MORALE: 'Stats!B16',
-  FORCED_MARCH: 'Stats!B17',
-  NIGHT_MARCH: 'Stats!B18',
-  // Range covering all stat rows (B2:B18, 17 rows)
-  ALL_STATS: 'Stats!B2:B18',
-};
+// Every army sheet must define these named ranges (Data → Named ranges in the
+// Sheets UI), each covering the single cell that holds that stat. Names match
+// the ArmySheetStats keys exactly. GMs are free to lay the sheet out however
+// they like — named ranges follow their cell when rows or columns move, so
+// this is the whole contract between the bot and the sheet.
+export const STAT_RANGE_NAMES = [
+  'infantry',
+  'cavalry',
+  'wagons',
+  'noncombatants',
+  'morale',
+  'resting_morale',
+  'supplies',
+  'coin',
+  'goods',
+  'hex',
+  'stance',
+  'infantry_strength',
+  'cavalry_strength',
+  'scouting_range',
+  'max_morale',
+  'forced_march',
+  'night_march',
+] as const;
 
-// Row indices within a B2:B18 read result (0-based)
-const ROW = {
-  INFANTRY: 0,
-  CAVALRY: 1,
-  WAGONS: 2,
-  NONCOMBATANTS: 3,
-  MORALE: 4,
-  RESTING_MORALE: 5,
-  SUPPLIES: 6,
-  COIN: 7,
-  GOODS: 8,
-  HEX: 9,
-  STANCE: 10,
-  INFANTRY_STRENGTH: 11,
-  CAVALRY_STRENGTH: 12,
-  SCOUTING_RANGE: 13,
-  MAX_MORALE: 14,
-  FORCED_MARCH: 15,
-  NIGHT_MARCH: 16,
-};
+export type StatRangeName = (typeof STAT_RANGE_NAMES)[number];
+export type StatCells = Partial<Record<StatRangeName, string | number | null>>;
 
-export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetStats {
-  const cell = (row: (string | number | null)[] | undefined): string | number | null =>
-    row?.[0] ?? null;
-  const num = (v: string | number | null, fallback: number): number => {
+export function missingStatRanges(definedNames: string[]): StatRangeName[] {
+  return STAT_RANGE_NAMES.filter((name) => !definedNames.includes(name));
+}
+
+export function parseSheetStats(cells: StatCells): ArmySheetStats {
+  type RawCell = string | number | null | undefined;
+  const num = (v: RawCell, fallback: number): number => {
     const n = Number(v);
-    return v !== null && v !== '' && !isNaN(n) ? Math.round(n) : fallback;
+    return v !== null && v !== undefined && v !== '' && !isNaN(n) ? Math.round(n) : fallback;
   };
-  const bool = (v: string | number | null): boolean => {
-    if (v === null || v === '') return false;
+  const bool = (v: RawCell): boolean => {
+    if (v === null || v === undefined || v === '') return false;
     const s = String(v).trim().toLowerCase();
     return s === '1' || s === 'true' || s === 'yes';
   };
-  const stance = (v: string | number | null): 'allow_passage' | 'engage' => {
+  const stance = (v: RawCell): 'allow_passage' | 'engage' => {
     const s = String(v ?? '').trim().toLowerCase();
     return s === 'engage' || s === 'block' ? 'engage' : 'allow_passage';
   };
   // Empty cell means a fresh sheet (position not set yet) — default to (0,0).
   // Anything else must parse exactly, so a GM's typo is reported instead of
   // silently landing the army on hex (0,0).
-  const parseHex = (v: string | number | null): { q: number; r: number } => {
+  const parseHex = (v: RawCell): { q: number; r: number } => {
     const raw = String(v ?? '').trim();
     if (raw === '') return { q: 0, r: 0 };
     const match = raw.match(/^(-?\d+)\s*,\s*(-?\d+)$/);
@@ -118,27 +103,27 @@ export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetSt
     return { q: parseInt(match[1], 10), r: parseInt(match[2], 10) };
   };
 
-  const hex = parseHex(cell(rows[ROW.HEX]));
+  const hex = parseHex(cells.hex);
 
   return {
-    infantry: num(cell(rows[ROW.INFANTRY]), 0),
-    cavalry: num(cell(rows[ROW.CAVALRY]), 0),
-    wagons: num(cell(rows[ROW.WAGONS]), 0),
-    noncombatants: num(cell(rows[ROW.NONCOMBATANTS]), 0),
-    morale: num(cell(rows[ROW.MORALE]), 9),
-    resting_morale: num(cell(rows[ROW.RESTING_MORALE]), 9),
-    supplies: num(cell(rows[ROW.SUPPLIES]), 0),
-    coin: num(cell(rows[ROW.COIN]), 0),
-    goods: num(cell(rows[ROW.GOODS]), 0),
+    infantry: num(cells.infantry, 0),
+    cavalry: num(cells.cavalry, 0),
+    wagons: num(cells.wagons, 0),
+    noncombatants: num(cells.noncombatants, 0),
+    morale: num(cells.morale, 9),
+    resting_morale: num(cells.resting_morale, 9),
+    supplies: num(cells.supplies, 0),
+    coin: num(cells.coin, 0),
+    goods: num(cells.goods, 0),
     hex_q: hex.q,
     hex_r: hex.r,
-    stance: stance(cell(rows[ROW.STANCE])),
-    infantry_strength: num(cell(rows[ROW.INFANTRY_STRENGTH]), 0),
-    cavalry_strength: num(cell(rows[ROW.CAVALRY_STRENGTH]), 0),
-    scouting_range: num(cell(rows[ROW.SCOUTING_RANGE]), 1),
-    max_morale: num(cell(rows[ROW.MAX_MORALE]), 12),
-    forced_march: bool(cell(rows[ROW.FORCED_MARCH])),
-    night_march: bool(cell(rows[ROW.NIGHT_MARCH])),
+    stance: stance(cells.stance),
+    infantry_strength: num(cells.infantry_strength, 0),
+    cavalry_strength: num(cells.cavalry_strength, 0),
+    scouting_range: num(cells.scouting_range, 1),
+    max_morale: num(cells.max_morale, 12),
+    forced_march: bool(cells.forced_march),
+    night_march: bool(cells.night_march),
   };
 }
 
@@ -263,37 +248,71 @@ export async function logMessage(
 
 // ── Army sheet helpers ─────────────────────────────────────────────────────
 
+export async function fetchDefinedRangeNames(sheetId: string): Promise<string[]> {
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: 'namedRanges.name',
+  });
+  return (meta.data.namedRanges ?? []).map((nr) => nr.name ?? '');
+}
+
 export async function fetchArmyStats(sheetId: string): Promise<ArmySheetStats> {
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: ARMY_SHEET_CELLS.ALL_STATS,
+  let res;
+  try {
+    res = await sheets.spreadsheets.values.batchGet({
+      spreadsheetId: sheetId,
+      ranges: [...STAT_RANGE_NAMES],
+    });
+  } catch (err) {
+    // A missing named range fails the whole batch with an unhelpful "Unable to
+    // parse range" — enumerate the sheet's named ranges to name the culprits.
+    const missing = missingStatRanges(await fetchDefinedRangeNames(sheetId));
+    if (missing.length > 0) {
+      throw new Error(
+        `Army sheet is missing named ranges: ${missing.join(', ')}. Define them via Data → Named ranges.`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+
+  const cells: StatCells = {};
+  const valueRanges = res.data.valueRanges ?? [];
+  STAT_RANGE_NAMES.forEach((name, i) => {
+    cells[name] = (valueRanges[i]?.values?.[0]?.[0] ?? null) as string | number | null;
   });
-  return parseSheetStats((res.data.values ?? []) as (string | number | null)[][]);
+  return parseSheetStats(cells);
+}
+
+export function statWriteData(
+  stats: ArmySheetStats,
+): { range: StatRangeName; values: (string | number)[][] }[] {
+  return [
+    { range: 'infantry', values: [[stats.infantry]] },
+    { range: 'cavalry', values: [[stats.cavalry]] },
+    { range: 'wagons', values: [[stats.wagons]] },
+    { range: 'noncombatants', values: [[stats.noncombatants]] },
+    { range: 'morale', values: [[stats.morale]] },
+    { range: 'resting_morale', values: [[stats.resting_morale]] },
+    { range: 'supplies', values: [[stats.supplies]] },
+    { range: 'coin', values: [[stats.coin]] },
+    { range: 'goods', values: [[stats.goods]] },
+    { range: 'hex', values: [[`${stats.hex_q},${stats.hex_r}`]] },
+    { range: 'stance', values: [[stats.stance]] },
+    { range: 'max_morale', values: [[stats.max_morale]] },
+    { range: 'forced_march', values: [[stats.forced_march ? 1 : 0]] },
+    { range: 'night_march', values: [[stats.night_march ? 1 : 0]] },
+    // infantry_strength, cavalry_strength, scouting_range are sheet-calculated; not written.
+  ];
 }
 
 export async function syncArmySheet(sheetId: string, stats: ArmySheetStats): Promise<void> {
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-  const data = [
-    { range: ARMY_SHEET_CELLS.INFANTRY, values: [[stats.infantry]] },
-    { range: ARMY_SHEET_CELLS.CAVALRY, values: [[stats.cavalry]] },
-    { range: ARMY_SHEET_CELLS.WAGONS, values: [[stats.wagons]] },
-    { range: ARMY_SHEET_CELLS.NONCOMBATANTS, values: [[stats.noncombatants]] },
-    { range: ARMY_SHEET_CELLS.MORALE, values: [[stats.morale]] },
-    { range: ARMY_SHEET_CELLS.RESTING_MORALE, values: [[stats.resting_morale]] },
-    { range: ARMY_SHEET_CELLS.SUPPLIES, values: [[stats.supplies]] },
-    { range: ARMY_SHEET_CELLS.COIN, values: [[stats.coin]] },
-    { range: ARMY_SHEET_CELLS.GOODS, values: [[stats.goods]] },
-    { range: ARMY_SHEET_CELLS.HEX, values: [[`${stats.hex_q},${stats.hex_r}`]] },
-    { range: ARMY_SHEET_CELLS.STANCE, values: [[stats.stance]] },
-    { range: ARMY_SHEET_CELLS.MAX_MORALE, values: [[stats.max_morale]] },
-    { range: ARMY_SHEET_CELLS.FORCED_MARCH, values: [[stats.forced_march ? 1 : 0]] },
-    { range: ARMY_SHEET_CELLS.NIGHT_MARCH, values: [[stats.night_march ? 1 : 0]] },
-    // Infantry Strength, Cavalry Strength, Scouting Range (B13–B15) are sheet-calculated; not written.
-  ];
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: sheetId,
-    requestBody: { valueInputOption: 'USER_ENTERED', data },
+    requestBody: { valueInputOption: 'USER_ENTERED', data: statWriteData(stats) },
   });
 }
 
@@ -301,7 +320,7 @@ export async function writeStance(sheetId: string, stance: 'allow_passage' | 'en
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
   await sheets.spreadsheets.values.update({
     spreadsheetId: sheetId,
-    range: ARMY_SHEET_CELLS.STANCE,
+    range: 'stance',
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[stance]] },
   });
@@ -318,8 +337,8 @@ export async function writePace(
     requestBody: {
       valueInputOption: 'USER_ENTERED',
       data: [
-        { range: ARMY_SHEET_CELLS.FORCED_MARCH, values: [[forcedMarch ? 1 : 0]] },
-        { range: ARMY_SHEET_CELLS.NIGHT_MARCH, values: [[nightMarch ? 1 : 0]] },
+        { range: 'forced_march', values: [[forcedMarch ? 1 : 0]] },
+        { range: 'night_march', values: [[nightMarch ? 1 : 0]] },
       ],
     },
   });

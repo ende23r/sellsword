@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { google } from 'googleapis';
 import type { Client } from 'discord.js';
-import { checkMessagesTab, checkQueueTab, checkStatsTab } from './sheet-checks.js';
+import { checkMessagesTab, checkQueueTab, checkStatsNamedRanges } from './sheet-checks.js';
 
 type CheckResult = { label: string; ok: boolean; detail?: string };
 
@@ -124,7 +124,7 @@ async function checkArmySheetTemplate(
       ok: true,
     };
     const sheets = google.sheets({ version: 'v4', auth });
-    const statsChecks = await checkStatsTab(sheets, templateId);
+    const statsChecks = await checkStatsNamedRanges(sheets, templateId);
     return [accessible, ...statsChecks];
   } catch (err) {
     return [

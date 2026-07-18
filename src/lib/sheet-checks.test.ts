@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { STAT_RANGE_NAMES } from './sheets.js';
 import {
   MESSAGES_TAB_HEADERS,
   QUEUE_TAB_HEADERS,
-  STATS_TAB_ROW_LABELS,
   checkMessagesTab,
   checkQueueTab,
-  checkStatsTab,
+  checkStatsNamedRanges,
 } from './sheet-checks.js';
 
 function makeSheets({
@@ -135,71 +135,50 @@ describe('checkMessagesTab', () => {
   });
 });
 
-// ── Stats tab ─────────────────────────────────────────────────────────────────
+// ── Stats named ranges ────────────────────────────────────────────────────────
 
-function makeStatsSheets({
-  tabs = ['Stats'],
-  rowLabels = STATS_TAB_ROW_LABELS,
-}: {
-  tabs?: string[];
-  rowLabels?: string[] | null;
-} = {}) {
+function makeNamedRangeSheets(names: string[]) {
   return {
     spreadsheets: {
       get: vi.fn().mockResolvedValue({
-        data: { sheets: tabs.map((title) => ({ properties: { title } })) },
+        data: { namedRanges: names.map((name) => ({ name })) },
       }),
-      values: {
-        get: vi.fn().mockResolvedValue({
-          data: { values: rowLabels ? rowLabels.map((l) => [l]) : [] },
-        }),
-      },
     },
   };
 }
 
-describe('checkStatsTab', () => {
-  it('passes when Stats tab exists with correct row labels', async () => {
-    const results = await checkStatsTab(makeStatsSheets() as any, 'sheet-id');
-    expect(results.every((r) => r.ok)).toBe(true);
-  });
-
-  it('fails when Stats tab does not exist', async () => {
-    const results = await checkStatsTab(
-      makeStatsSheets({ tabs: ['Sheet1'] }) as any,
+describe('checkStatsNamedRanges', () => {
+  it('passes when every stat named range is defined', async () => {
+    const results = await checkStatsNamedRanges(
+      makeNamedRangeSheets([...STAT_RANGE_NAMES]) as any,
       'sheet-id',
     );
-    const tabCheck = results.find((r) => r.label.includes('"Stats" tab'));
-    expect(tabCheck?.ok).toBe(false);
+    expect(results).toHaveLength(1);
+    expect(results[0].ok).toBe(true);
   });
 
-  it('does not check labels when tab is missing', async () => {
-    const sheets = makeStatsSheets({ tabs: [] });
-    await checkStatsTab(sheets as any, 'sheet-id');
-    expect(sheets.spreadsheets.values.get).not.toHaveBeenCalled();
-  });
-
-  it('fails when row labels do not match', async () => {
-    const results = await checkStatsTab(
-      makeStatsSheets({ rowLabels: ['Wrong', 'Labels'] }) as any,
+  it('ignores extra named ranges', async () => {
+    const results = await checkStatsNamedRanges(
+      makeNamedRangeSheets([...STAT_RANGE_NAMES, 'gm_notes']) as any,
       'sheet-id',
     );
-    const labelCheck = results.find((r) => r.label.includes('row labels'));
-    expect(labelCheck?.ok).toBe(false);
+    expect(results[0].ok).toBe(true);
   });
 
-  it('fails when Stats tab is empty', async () => {
-    const results = await checkStatsTab(makeStatsSheets({ rowLabels: null }) as any, 'sheet-id');
-    const labelCheck = results.find((r) => r.label.includes('row labels'));
-    expect(labelCheck?.ok).toBe(false);
-  });
-
-  it('reports the found labels in the detail when wrong', async () => {
-    const results = await checkStatsTab(
-      makeStatsSheets({ rowLabels: ['A', 'B'] }) as any,
+  it('fails and lists the missing names', async () => {
+    const defined = STAT_RANGE_NAMES.filter((n) => n !== 'morale' && n !== 'hex');
+    const results = await checkStatsNamedRanges(
+      makeNamedRangeSheets(defined) as any,
       'sheet-id',
     );
-    const labelCheck = results.find((r) => r.label.includes('row labels'));
-    expect(labelCheck?.detail).toContain('A, B');
+    expect(results[0].ok).toBe(false);
+    expect(results[0].detail).toContain('morale');
+    expect(results[0].detail).toContain('hex');
+  });
+
+  it('fails when the sheet has no named ranges at all', async () => {
+    const results = await checkStatsNamedRanges(makeNamedRangeSheets([]) as any, 'sheet-id');
+    expect(results[0].ok).toBe(false);
+    expect(results[0].detail).toContain('infantry');
   });
 });

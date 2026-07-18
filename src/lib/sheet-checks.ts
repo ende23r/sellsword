@@ -1,4 +1,5 @@
 import type { sheets_v4 } from 'googleapis';
+import { STAT_RANGE_NAMES, missingStatRanges } from './sheets.js';
 
 type CheckResult = { label: string; ok: boolean; detail?: string };
 
@@ -13,27 +14,6 @@ export const MESSAGES_TAB_HEADERS = [
   'Recipient',
   'Content',
   'Deliver At',
-];
-
-// These must match the row order in ARMY_SHEET_CELLS in sheets.ts (rows 2–18, column A labels)
-export const STATS_TAB_ROW_LABELS = [
-  'Infantry',
-  'Cavalry',
-  'Wagons',
-  'Noncombatants',
-  'Morale',
-  'Resting Morale',
-  'Supplies',
-  'Coin',
-  'Goods',
-  'Hex',
-  'Stance',
-  'Infantry Strength',
-  'Cavalry Strength',
-  'Scouting Range',
-  'Max Morale',
-  'Forced March',
-  'Night March',
 ];
 
 export async function checkQueueTab(
@@ -116,44 +96,26 @@ export async function checkMessagesTab(
   return results;
 }
 
-export async function checkStatsTab(
+export async function checkStatsNamedRanges(
   sheets: sheets_v4.Sheets,
   sheetId: string,
 ): Promise<CheckResult[]> {
-  const results: CheckResult[] = [];
-
   const meta = await sheets.spreadsheets.get({
     spreadsheetId: sheetId,
-    fields: 'sheets.properties.title',
+    fields: 'namedRanges.name',
   });
 
-  const tabs = (meta.data.sheets ?? []).map((s) => s.properties?.title ?? '');
-  const tabExists = tabs.includes('Stats');
+  const defined = (meta.data.namedRanges ?? []).map((nr) => nr.name ?? '');
+  const missing = missingStatRanges(defined);
 
-  results.push({
-    label: 'Army sheet template has a "Stats" tab',
-    ok: tabExists,
-    detail: tabExists ? undefined : `found tabs: ${tabs.join(', ') || '(none)'}`,
-  });
-
-  if (!tabExists) return results;
-
-  const labelRes = await sheets.spreadsheets.values.get({
-    spreadsheetId: sheetId,
-    range: 'Stats!A2:A18',
-  });
-
-  const rows = labelRes.data.values ?? [];
-  const actualLabels = rows.map((r) => r[0] ?? '');
-  const expected = STATS_TAB_ROW_LABELS;
-  const labelsMatch =
-    expected.length === actualLabels.length && expected.every((l, i) => actualLabels[i] === l);
-
-  results.push({
-    label: `Stats tab has expected row labels (${expected.join(', ')})`,
-    ok: labelsMatch,
-    detail: labelsMatch ? undefined : `found: ${actualLabels.join(', ') || '(empty)'}`,
-  });
-
-  return results;
+  return [
+    {
+      label: `Army sheet defines all ${STAT_RANGE_NAMES.length} stat named ranges`,
+      ok: missing.length === 0,
+      detail:
+        missing.length === 0
+          ? undefined
+          : `missing: ${missing.join(', ')} — define them via Data → Named ranges`,
+    },
+  ];
 }
