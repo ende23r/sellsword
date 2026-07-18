@@ -47,15 +47,20 @@ try {
 
 console.log('Stats as the bot reads them:');
 for (const [key, value] of Object.entries(stats)) {
-  if (key === 'detachments') continue;
+  if (key === 'infantry_detachments' || key === 'cavalry_detachments') continue;
   console.log(`  ${key.padEnd(18)} ${value}`);
 }
 
-console.log(`\nDetachments (${stats.detachments.length}):`);
-for (const d of stats.detachments) {
-  console.log(
-    `  ${(d.name || '(unnamed)').padEnd(24)} size ${String(d.size).padEnd(6)} ×${String(d.multiplier).padEnd(4)} strength ${String(d.strength).padEnd(6)} wagons ${String(d.wagons).padEnd(4)} ${d.notes}`,
-  );
+for (const [label, detachments] of [
+  ['Infantry detachments', stats.infantry_detachments],
+  ['Cavalry detachments', stats.cavalry_detachments],
+] as const) {
+  console.log(`\n${label} (${detachments.length}):`);
+  for (const d of detachments) {
+    console.log(
+      `  ${(d.name || '(unnamed)').padEnd(24)} size ${String(d.size).padEnd(6)} ×${String(d.multiplier).padEnd(4)} strength ${String(d.strength).padEnd(6)} wagons ${String(d.wagons).padEnd(4)} ${d.notes}`,
+    );
+  }
 }
 console.log('Derived totals:');
 console.log(`  supply upkeep/day  ${supplyUpkeep(stats) + stats.noncombatants + totalWagons(stats) * 10}`);

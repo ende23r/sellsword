@@ -29,7 +29,7 @@ export type BattleOutcome = {
 };
 
 export function effectiveStrength(
-  stats: Pick<ArmySheetStats, 'detachments' | 'noncombatants'>,
+  stats: Pick<ArmySheetStats, 'infantry_detachments' | 'cavalry_detachments' | 'noncombatants'>,
 ): number {
   return totalStrength(stats) + stats.noncombatants;
 }

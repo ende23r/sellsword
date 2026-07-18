@@ -16,10 +16,11 @@ import type { CommanderRow } from './db.js';
 
 // ── Army sheet stats (source of truth; all army data lives here) ──────────────
 
-// One row of the sheet's detachments table. Multiplier (daily supplies eaten
-// per soldier) and strength are explicit rather than derived from a type, so
-// GMs can invent custom detachment types without bot changes; notes is free
-// text for type, honors, and anything else.
+// One row of a sheet's detachment tables. Multiplier (daily supplies eaten
+// per soldier; defaults to 1 for infantry rows and 10 for cavalry rows) and
+// strength are explicit rather than derived from a type, so GMs can invent
+// custom detachment types without bot changes; notes is free text for type,
+// honors, and anything else.
 export type Detachment = {
   name: string;
   size: number;
@@ -30,8 +31,11 @@ export type Detachment = {
 };
 
 export type ArmySheetStats = {
-  // Composition (GM-owned; the bot reads and derives totals, never writes)
-  detachments: Detachment[];
+  // Composition (GM-owned; the bot reads and derives totals, never writes).
+  // Infantry and cavalry are separate tables because the rules treat them
+  // differently (supply upkeep, scouting, forced-march speed).
+  infantry_detachments: Detachment[];
+  cavalry_detachments: Detachment[];
   noncombatants: number;
   // Resources
   morale: number;
@@ -54,33 +58,40 @@ export type ArmySheetStats = {
 
 // ── Derived totals ────────────────────────────────────────────────────────────
 
-export function totalWagons(stats: Pick<ArmySheetStats, 'detachments'>): number {
-  return stats.detachments.reduce((sum, d) => sum + d.wagons, 0);
+type Composition = Pick<ArmySheetStats, 'infantry_detachments' | 'cavalry_detachments'>;
+
+function allDetachments(stats: Composition): Detachment[] {
+  return [...stats.infantry_detachments, ...stats.cavalry_detachments];
 }
 
-export function totalStrength(stats: Pick<ArmySheetStats, 'detachments'>): number {
-  return stats.detachments.reduce((sum, d) => sum + d.strength, 0);
+export function totalWagons(stats: Composition): number {
+  return allDetachments(stats).reduce((sum, d) => sum + d.wagons, 0);
 }
 
-export function supplyUpkeep(stats: Pick<ArmySheetStats, 'detachments'>): number {
-  return Math.round(stats.detachments.reduce((sum, d) => sum + d.size * d.multiplier, 0));
+export function totalStrength(stats: Composition): number {
+  return allDetachments(stats).reduce((sum, d) => sum + d.strength, 0);
 }
 
-// Mounted troops eat 10×; a multiplier of 10 or more is what distinguishes a
-// cavalry detachment as far as the bot is concerned (forced-march speed).
-export function isCavalryOnly(stats: Pick<ArmySheetStats, 'detachments'>): boolean {
+export function supplyUpkeep(stats: Composition): number {
+  return Math.round(allDetachments(stats).reduce((sum, d) => sum + d.size * d.multiplier, 0));
+}
+
+export function isCavalryOnly(stats: Composition): boolean {
   return (
-    stats.detachments.length > 0 && stats.detachments.every((d) => d.multiplier >= 10 && d.wagons === 0)
+    stats.cavalry_detachments.length > 0 &&
+    stats.infantry_detachments.length === 0 &&
+    totalWagons(stats) === 0
   );
 }
 
 // Every army sheet must define these named ranges (Data → Named ranges in the
 // Sheets UI). Each scalar range covers the single cell that holds that stat;
-// `detachments` covers the detachments table's data rows (columns
-// name | size | notes | multiplier | strength | wagons, header row excluded —
-// draw it generously downward, blank rows are ignored). GMs are free to lay
-// the sheet out however they like — named ranges follow their cell when rows
-// or columns move, so this is the whole contract between the bot and the sheet.
+// `infantry_detachments` and `cavalry_detachments` each cover a detachment
+// table's data rows (columns name | size | notes | multiplier | strength |
+// wagons, header row excluded — draw them generously downward, blank rows are
+// ignored). GMs are free to lay the sheet out however they like — named
+// ranges follow their cell when rows or columns move, so this is the whole
+// contract between the bot and the sheet.
 export const SCALAR_RANGE_NAMES = [
   'noncombatants',
   'morale',
@@ -96,7 +107,11 @@ export const SCALAR_RANGE_NAMES = [
   'night_march',
 ] as const;
 
-export const STAT_RANGE_NAMES = [...SCALAR_RANGE_NAMES, 'detachments'] as const;
+export const STAT_RANGE_NAMES = [
+  ...SCALAR_RANGE_NAMES,
+  'infantry_detachments',
+  'cavalry_detachments',
+] as const;
 
 export type ScalarRangeName = (typeof SCALAR_RANGE_NAMES)[number];
 export type StatRangeName = (typeof STAT_RANGE_NAMES)[number];
@@ -110,14 +125,18 @@ type RawCell = string | number | null | undefined;
 
 const blank = (v: RawCell): boolean => v === null || v === undefined || String(v).trim() === '';
 
-export function parseDetachments(rows: RawCell[][]): Detachment[] {
+export function parseDetachments(
+  rows: RawCell[][],
+  tableLabel: string,
+  defaultMultiplier: number,
+): Detachment[] {
   const detachments: Detachment[] = [];
 
   rows.forEach((row, i) => {
     const [name, size, notes, multiplier, strength, wagons] = [0, 1, 2, 3, 4, 5].map((c) => row[c]);
     if ([name, size, notes, multiplier, strength, wagons].every(blank)) return;
 
-    const label = `Detachment row ${i + 1} ("${String(name ?? '').trim() || 'unnamed'}")`;
+    const label = `${tableLabel} detachment row ${i + 1} ("${String(name ?? '').trim() || 'unnamed'}")`;
     const numCol = (v: RawCell, col: string, fallback: number | null): number => {
       if (blank(v)) {
         if (fallback === null) throw new Error(`${label}: ${col} is required.`);
@@ -132,7 +151,7 @@ export function parseDetachments(rows: RawCell[][]): Detachment[] {
       name: String(name ?? '').trim(),
       size: Math.round(numCol(size, 'size', null)),
       notes: String(notes ?? '').trim(),
-      multiplier: numCol(multiplier, 'multiplier', 1),
+      multiplier: numCol(multiplier, 'multiplier', defaultMultiplier),
       strength: Math.round(numCol(strength, 'strength', 0)),
       wagons: Math.round(numCol(wagons, 'wagons', 0)),
     });
@@ -141,7 +160,11 @@ export function parseDetachments(rows: RawCell[][]): Detachment[] {
   return detachments;
 }
 
-export function parseSheetStats(cells: StatCells, detachmentRows: RawCell[][]): ArmySheetStats {
+export function parseSheetStats(
+  cells: StatCells,
+  infantryRows: RawCell[][],
+  cavalryRows: RawCell[][],
+): ArmySheetStats {
   const num = (v: RawCell, fallback: number): number => {
     const n = Number(v);
     return v !== null && v !== undefined && v !== '' && !isNaN(n) ? Math.round(n) : fallback;
@@ -171,7 +194,8 @@ export function parseSheetStats(cells: StatCells, detachmentRows: RawCell[][]): 
   const hex = parseHex(cells.hex);
 
   return {
-    detachments: parseDetachments(detachmentRows),
+    infantry_detachments: parseDetachments(infantryRows, 'Infantry', 1),
+    cavalry_detachments: parseDetachments(cavalryRows, 'Cavalry', 10),
     noncombatants: num(cells.noncombatants, 0),
     morale: num(cells.morale, 9),
     resting_morale: num(cells.resting_morale, 9),
@@ -344,9 +368,10 @@ export async function fetchArmyStats(sheetId: string): Promise<ArmySheetStats> {
   SCALAR_RANGE_NAMES.forEach((name, i) => {
     cells[name] = (valueRanges[i]?.values?.[0]?.[0] ?? null) as string | number | null;
   });
-  // `detachments` is requested last, after the scalars.
-  const detachmentRows = (valueRanges[SCALAR_RANGE_NAMES.length]?.values ?? []) as RawCell[][];
-  return parseSheetStats(cells, detachmentRows);
+  // The detachment tables are requested last, after the scalars.
+  const infantryRows = (valueRanges[SCALAR_RANGE_NAMES.length]?.values ?? []) as RawCell[][];
+  const cavalryRows = (valueRanges[SCALAR_RANGE_NAMES.length + 1]?.values ?? []) as RawCell[][];
+  return parseSheetStats(cells, infantryRows, cavalryRows);
 }
 
 // The ranges the bot owns and writes back. Everything else — detachments,

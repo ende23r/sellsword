@@ -8,8 +8,8 @@ const mockExtractSheetId = vi.hoisted(() => vi.fn());
 vi.mock('../lib/sheets.js', () => ({
   fetchArmyStats: mockFetchArmyStats,
   extractSheetId: mockExtractSheetId,
-  totalWagons: (s: { detachments: { wagons: number }[] }) =>
-    s.detachments.reduce((sum, d) => sum + d.wagons, 0),
+  totalWagons: (s: { infantry_detachments: { wagons: number }[]; cavalry_detachments: { wagons: number }[] }) =>
+    [...s.infantry_detachments, ...s.cavalry_detachments].reduce((sum, d) => sum + d.wagons, 0),
 }));
 
 vi.mock('../lib/db.js', () => ({
@@ -39,7 +39,7 @@ describe('/move', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchArmyStats.mockResolvedValue({
-      detachments: [], noncombatants: 0,
+      infantry_detachments: [], cavalry_detachments: [], noncombatants: 0,
       morale: 9, resting_morale: 9, max_morale: 12,
       supplies: 0, coin: 0, goods: 0,
       stance: 'allow_passage' as const,

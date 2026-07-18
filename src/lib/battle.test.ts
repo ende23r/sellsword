@@ -26,7 +26,8 @@ function det(overrides: Partial<Detachment> = {}): Detachment {
 
 function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
   return {
-    detachments: [det()],
+    infantry_detachments: [det()],
+    cavalry_detachments: [],
     noncombatants: 0,
     scouting_range: 1,
     morale: 9,
@@ -54,14 +55,15 @@ function seqRng(...vals: number[]): () => number {
 describe('effectiveStrength', () => {
   it('sums detachment strengths + noncombatants', () => {
     const stats = makeStats({
-      detachments: [det({ strength: 1000 }), det({ strength: 400 })],
+      infantry_detachments: [det({ strength: 1000 })],
+      cavalry_detachments: [det({ strength: 400 })],
       noncombatants: 300,
     });
     expect(effectiveStrength(stats)).toBe(1700);
   });
 
   it('excludes raw sizes and wagons', () => {
-    const stats = makeStats({ detachments: [det({ size: 5000, wagons: 20, strength: 0 })] });
+    const stats = makeStats({ infantry_detachments: [det({ size: 5000, wagons: 20, strength: 0 })] });
     expect(effectiveStrength(stats)).toBe(0);
   });
 });
@@ -177,14 +179,14 @@ describe('resolveBattle', () => {
   it('never modifies detachments or noncombatants — casualties are applied manually by the GM', () => {
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ detachments: [det({ size: 1000, wagons: 3 })], noncombatants: 50 });
-    const statsB = makeStats({ detachments: [det({ size: 800 })], noncombatants: 20 });
+    const statsA = makeStats({ infantry_detachments: [det({ size: 1000, wagons: 3 })], noncombatants: 50 });
+    const statsB = makeStats({ infantry_detachments: [det({ size: 800 })], noncombatants: 20 });
     const stats = new Map([[a, statsA], [b, statsB]]);
     // A crushes B (diff 6+, 20% loser casualties)
     resolveBattle(db, a, b, stats, null, seqRng(1, 1, 1 / 6, 1 / 6, 0.5));
-    expect(statsA.detachments).toEqual([det({ size: 1000, wagons: 3 })]);
+    expect(statsA.infantry_detachments).toEqual([det({ size: 1000, wagons: 3 })]);
     expect(statsA.noncombatants).toBe(50);
-    expect(statsB.detachments).toEqual([det({ size: 800 })]);
+    expect(statsB.infantry_detachments).toEqual([det({ size: 800 })]);
     expect(statsB.noncombatants).toBe(20);
   });
 
@@ -276,8 +278,8 @@ describe('resolveBattle', () => {
     const a = seedArmy(db);
     const b = seedArmy(db);
     const stats = new Map([
-      [a, makeStats({ detachments: [det({ strength: 2000 })] })],
-      [b, makeStats({ detachments: [det({ strength: 1000 })] })],
+      [a, makeStats({ infantry_detachments: [det({ strength: 2000 })] })],
+      [b, makeStats({ infantry_detachments: [det({ strength: 1000 })] })],
     ]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.sideA.modifier).toBe(3);
@@ -289,8 +291,8 @@ describe('resolveBattle', () => {
     const a = seedArmy(db);
     const b = seedArmy(db);
     const stats = new Map([
-      [a, makeStats({ detachments: [det({ strength: 400 }), det({ strength: 200 })] })],
-      [b, makeStats({ detachments: [det({ strength: 200 })] })],
+      [a, makeStats({ infantry_detachments: [det({ strength: 400 })], cavalry_detachments: [det({ strength: 200 })] })],
+      [b, makeStats({ infantry_detachments: [det({ strength: 200 })] })],
     ]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.sideA.modifier).toBe(4);
@@ -321,8 +323,8 @@ describe('resolveBattle', () => {
     const a = seedArmy(db);
     const b = seedArmy(db);
     const stats = new Map([
-      [a, makeStats({ detachments: [det({ strength: 2000 })], morale: 12, max_morale: 12, supplies: 1000 })],
-      [b, makeStats({ detachments: [det({ strength: 100 })], morale: 1, supplies: 0 })],
+      [a, makeStats({ infantry_detachments: [det({ strength: 2000 })], morale: 12, max_morale: 12, supplies: 1000 })],
+      [b, makeStats({ infantry_detachments: [det({ strength: 100 })], morale: 1, supplies: 0 })],
     ]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.impossible).toBe(true);

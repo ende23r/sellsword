@@ -94,7 +94,7 @@ const commission: Command = {
       sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}`;
       await shareSheetPublic(sheetId);
       const defaultStats: ArmySheetStats = {
-        detachments: [], noncombatants: 0,
+        infantry_detachments: [], cavalry_detachments: [], noncombatants: 0,
         morale: 9, resting_morale: 9, max_morale: 12,
         supplies: 0, coin: 0, goods: 0,
         stance: 'allow_passage',

@@ -67,7 +67,7 @@ describe('/message', () => {
     });
     mockFetchArmyStats.mockImplementation((sheetId: string) =>
       Promise.resolve({
-        detachments: [], noncombatants: 0,
+        infantry_detachments: [], cavalry_detachments: [], noncombatants: 0,
         morale: 9, resting_morale: 9, max_morale: 12,
         supplies: 0, coin: 0, goods: 0,
         stance: 'allow_passage' as const,
