@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import type { ArmySheetStats } from './sheets.js';
+import type { ArmySheetStats, Detachment } from './sheets.js';
 import { effectiveStrength, numericalAdvantage, resolveBattle } from './battle.js';
 
 function makeDb() {
@@ -20,13 +20,13 @@ function seedArmy(db: Database.Database, overrides: { id?: number } = {}): numbe
   return id;
 }
 
+function det(overrides: Partial<Detachment> = {}): Detachment {
+  return { name: 'Foot', size: 1000, notes: '', multiplier: 1, strength: 0, wagons: 0, ...overrides };
+}
+
 function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
   return {
-    infantry: 1000,
-    infantry_strength: 0,
-    cavalry: 0,
-    cavalry_strength: 0,
-    wagons: 0,
+    detachments: [det()],
     noncombatants: 0,
     scouting_range: 1,
     morale: 9,
@@ -52,12 +52,17 @@ function seqRng(...vals: number[]): () => number {
 }
 
 describe('effectiveStrength', () => {
-  it('sums infantry_strength + noncombatants + cavalry_strength', () => {
-    expect(effectiveStrength({ infantry_strength: 1000, cavalry_strength: 400, noncombatants: 300 })).toBe(1700);
+  it('sums detachment strengths + noncombatants', () => {
+    const stats = makeStats({
+      detachments: [det({ strength: 1000 }), det({ strength: 400 })],
+      noncombatants: 300,
+    });
+    expect(effectiveStrength(stats)).toBe(1700);
   });
 
-  it('excludes raw counts and wagons', () => {
-    expect(effectiveStrength({ infantry_strength: 0, cavalry_strength: 0, noncombatants: 0 })).toBe(0);
+  it('excludes raw sizes and wagons', () => {
+    const stats = makeStats({ detachments: [det({ size: 5000, wagons: 20, strength: 0 })] });
+    expect(effectiveStrength(stats)).toBe(0);
   });
 });
 
@@ -155,87 +160,97 @@ describe('resolveBattle', () => {
     expect(result.diff).toBe(0);
   });
 
-  it('diff=0 with attacker: attacker loses 1 morale, both take 5%', () => {
+  it('diff=0 with attacker: attacker loses 1 morale, casualties reported not applied', () => {
     // B attacks, A defends. A gets +1 (chosen battlefield). A rolls 5, B rolls 6 → totals tie.
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 1000, noncombatants: 0, cavalry: 0, morale: 9 });
-    const statsB = makeStats({ infantry: 1000, noncombatants: 0, cavalry: 0, morale: 9 });
+    const statsA = makeStats({ morale: 9 });
+    const statsB = makeStats({ morale: 9 });
     const stats = new Map([[a, statsA], [b, statsB]]);
-    resolveBattle(db, a, b, stats, b, seqRng(2 / 6, 3 / 6, 3 / 6, 3 / 6));
-    expect(statsA.infantry).toBe(950); // 5% casualties
-    expect(statsA.morale).toBe(9);     // no morale change for defender
-    expect(statsB.infantry).toBe(950); // 5% casualties
-    expect(statsB.morale).toBe(8);     // -1 attacker penalty
+    const result = resolveBattle(db, a, b, stats, b, seqRng(2 / 6, 3 / 6, 3 / 6, 3 / 6)) as any;
+    expect(result.victorCasualtyPct).toBe(5);
+    expect(result.loserCasualtyPct).toBe(5);
+    expect(statsA.morale).toBe(9); // no morale change for defender
+    expect(statsB.morale).toBe(8); // -1 attacker penalty
   });
 
-  it('draw: 5% casualties each, no morale change', () => {
+  it('never modifies detachments or noncombatants — casualties are applied manually by the GM', () => {
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 1000, noncombatants: 0, cavalry: 0, morale: 9 });
-    const statsB = makeStats({ infantry: 1000, noncombatants: 0, cavalry: 0, morale: 9 });
+    const statsA = makeStats({ detachments: [det({ size: 1000, wagons: 3 })], noncombatants: 50 });
+    const statsB = makeStats({ detachments: [det({ size: 800 })], noncombatants: 20 });
     const stats = new Map([[a, statsA], [b, statsB]]);
-    resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5));
-    expect(statsA.infantry).toBe(950);
-    expect(statsB.infantry).toBe(950);
+    // A crushes B (diff 6+, 20% loser casualties)
+    resolveBattle(db, a, b, stats, null, seqRng(1, 1, 1 / 6, 1 / 6, 0.5));
+    expect(statsA.detachments).toEqual([det({ size: 1000, wagons: 3 })]);
+    expect(statsA.noncombatants).toBe(50);
+    expect(statsB.detachments).toEqual([det({ size: 800 })]);
+    expect(statsB.noncombatants).toBe(20);
+  });
+
+  it('draw: 5% casualties reported, no morale change', () => {
+    const a = seedArmy(db);
+    const b = seedArmy(db);
+    const statsA = makeStats({ morale: 9 });
+    const statsB = makeStats({ morale: 9 });
+    const stats = new Map([[a, statsA], [b, statsB]]);
+    const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
+    expect(result.victorCasualtyPct).toBe(5);
+    expect(result.loserCasualtyPct).toBe(5);
     expect(statsA.morale).toBe(9);
     expect(statsB.morale).toBe(9);
   });
 
-  it('diff=1: both 10% casualties, loser −1 morale', () => {
+  it('diff=1: 10% casualties reported for both, loser −1 morale', () => {
     // A rolls 4+3=7, B rolls 3+3=6 → diff 1, A wins
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 1000, morale: 9 });
-    const statsB = makeStats({ infantry: 1000, morale: 9 });
+    const statsA = makeStats({ morale: 9 });
+    const statsB = makeStats({ morale: 9 });
     const stats = new Map([[a, statsA], [b, statsB]]);
-    resolveBattle(db, a, b, stats, null, seqRng(4 / 6, 3 / 6, 3 / 6, 3 / 6));
-    expect(statsA.infantry).toBe(900);
-    expect(statsB.infantry).toBe(900);
+    const result = resolveBattle(db, a, b, stats, null, seqRng(4 / 6, 3 / 6, 3 / 6, 3 / 6)) as any;
+    expect(result.victorCasualtyPct).toBe(10);
+    expect(result.loserCasualtyPct).toBe(10);
     expect(statsA.morale).toBe(9); // no change for victor at diff=1
     expect(statsB.morale).toBe(8); // -1
   });
 
-  it('diff=2–3: victor +1 morale, loser −2 morale, 5%/10% casualties', () => {
+  it('diff=2–3: victor +1 morale, loser −2 morale, 5%/10% casualties reported', () => {
     // A rolls 5+4=9, B rolls 3+3=6 → diff 3
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 1000, morale: 9 });
-    const statsB = makeStats({ infantry: 1000, morale: 9 });
+    const statsA = makeStats({ morale: 9 });
+    const statsB = makeStats({ morale: 9 });
     const stats = new Map([[a, statsA], [b, statsB]]);
-    resolveBattle(db, a, b, stats, null, seqRng(5 / 6, 4 / 6, 3 / 6, 3 / 6));
-    expect(statsA.infantry).toBe(950); // 5%
-    expect(statsB.infantry).toBe(900); // 10%
-    expect(statsA.morale).toBe(10);    // +1
-    expect(statsB.morale).toBe(7);     // -2
+    const result = resolveBattle(db, a, b, stats, null, seqRng(5 / 6, 4 / 6, 3 / 6, 3 / 6)) as any;
+    expect(result.victorCasualtyPct).toBe(5);
+    expect(result.loserCasualtyPct).toBe(10);
+    expect(statsA.morale).toBe(10); // +1
+    expect(statsB.morale).toBe(7); // -2
   });
 
-  it('diff=4–5: 5%/15% casualties, capture roll generated', () => {
+  it('diff=4–5: 5%/15% casualties reported, capture roll generated', () => {
     // A rolls 6+5=11, B rolls 3+3=6 → diff 5; capture roll = ceil(1/6*6)=1 ≤ 1 → captured
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 1000, morale: 9 });
-    const statsB = makeStats({ infantry: 1000, morale: 9 });
-    const stats = new Map([[a, statsA], [b, statsB]]);
+    const stats = new Map([[a, makeStats()], [b, makeStats()]]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(6 / 6, 5 / 6, 3 / 6, 3 / 6, 1 / 6)) as any;
     expect(result.diff).toBe(5);
     expect(result.captureRoll).toBe(1);
     expect(result.loserCaptured).toBe(true);
-    expect(statsB.infantry).toBe(850); // 15%
+    expect(result.loserCasualtyPct).toBe(15);
   });
 
-  it('diff=6+: 5%/20% casualties, 2-in-6 capture', () => {
+  it('diff=6+: 5%/20% casualties reported, 2-in-6 capture', () => {
     // A rolls 12, B rolls 2 → diff 10; capture roll=3 → not captured (need ≤2 for 2-in-6)
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 1000, morale: 9 });
-    const statsB = makeStats({ infantry: 1000, morale: 9 });
-    const stats = new Map([[a, statsA], [b, statsB]]);
+    const stats = new Map([[a, makeStats()], [b, makeStats()]]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(1, 1, 1 / 6, 1 / 6, 3 / 6)) as any;
     expect(result.diff).toBeGreaterThanOrEqual(6);
     expect(result.captureRoll).toBe(3);
     expect(result.loserCaptured).toBe(false);
-    expect(statsB.infantry).toBe(800); // 20%
+    expect(result.loserCasualtyPct).toBe(20);
   });
 
   it('undersupplied gives −1 modifier', () => {
@@ -256,26 +271,26 @@ describe('resolveBattle', () => {
     expect(result.sideB.modifier).toBe(0);
   });
 
-  it('numerical advantage uses infantry_strength and cavalry_strength', () => {
-    // A: infantry_strength 2000, B: infantry_strength 1000 → 2× → +3
+  it('numerical advantage uses summed detachment strength', () => {
+    // A: strength 2000, B: strength 1000 → 2× → +3
     const a = seedArmy(db);
     const b = seedArmy(db);
     const stats = new Map([
-      [a, makeStats({ infantry_strength: 2000 })],
-      [b, makeStats({ infantry_strength: 1000 })],
+      [a, makeStats({ detachments: [det({ strength: 2000 })] })],
+      [b, makeStats({ detachments: [det({ strength: 1000 })] })],
     ]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.sideA.modifier).toBe(3);
     expect(result.sideB.modifier).toBe(0);
   });
 
-  it('cavalry_strength contributes to effective strength', () => {
-    // A: cavalry_strength 600 (total effective 600), B: infantry_strength 200 (total 200) → 3× → +4
+  it('strength sums across multiple detachments', () => {
+    // A: 400 + 200 = 600 effective, B: 200 → 3× → +4
     const a = seedArmy(db);
     const b = seedArmy(db);
     const stats = new Map([
-      [a, makeStats({ cavalry_strength: 600, infantry_strength: 0 })],
-      [b, makeStats({ infantry_strength: 200 })],
+      [a, makeStats({ detachments: [det({ strength: 400 }), det({ strength: 200 })] })],
+      [b, makeStats({ detachments: [det({ strength: 200 })] })],
     ]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.sideA.modifier).toBe(4);
@@ -300,14 +315,14 @@ describe('resolveBattle', () => {
     expect(result.sideB.modifier).toBe(0);
   });
 
-  it('impossible battle: extra 10% casualties and no victor morale gain', () => {
-    // A: infantry_strength 2000, morale 12; B: infantry_strength 100, morale 1, supplies 0
+  it('impossible battle: extra 10% casualties reported and no victor morale gain', () => {
+    // A: strength 2000, morale 12; B: strength 100, morale 1, supplies 0
     // modA = numAdv(2000,100)=7 + moraleAdv(11)=11 = 18; modB = -1 → netDiff=19 ≥ 11
     const a = seedArmy(db);
     const b = seedArmy(db);
     const stats = new Map([
-      [a, makeStats({ infantry_strength: 2000, morale: 12, max_morale: 12, supplies: 1000 })],
-      [b, makeStats({ infantry_strength: 100, morale: 1, supplies: 0 })],
+      [a, makeStats({ detachments: [det({ strength: 2000 })], morale: 12, max_morale: 12, supplies: 1000 })],
+      [b, makeStats({ detachments: [det({ strength: 100 })], morale: 1, supplies: 0 })],
     ]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.impossible).toBe(true);
@@ -319,8 +334,8 @@ describe('resolveBattle', () => {
     // A at morale 11 (max 12), wins diff=6+ → would gain 2, should cap at 12
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 1000, morale: 11, max_morale: 12 });
-    const statsB = makeStats({ infantry: 1000, morale: 9 });
+    const statsA = makeStats({ morale: 11, max_morale: 12 });
+    const statsB = makeStats({ morale: 9 });
     const stats = new Map([[a, statsA], [b, statsB]]);
     resolveBattle(db, a, b, stats, null, seqRng(1, 1, 1 / 6, 1 / 6, 0.5));
     expect(statsA.morale).toBe(12);
@@ -329,8 +344,8 @@ describe('resolveBattle', () => {
   it('morale is clamped to 1 minimum on loss', () => {
     const a = seedArmy(db);
     const b = seedArmy(db);
-    const statsA = makeStats({ infantry: 100, morale: 1 });
-    const statsB = makeStats({ infantry: 1000, morale: 9 });
+    const statsA = makeStats({ morale: 1 });
+    const statsB = makeStats({ morale: 9 });
     const stats = new Map([[a, statsA], [b, statsB]]);
     resolveBattle(db, a, b, stats, null, seqRng(1 / 6, 1 / 6, 1, 1, 0.5));
     expect(statsA.morale).toBe(1);

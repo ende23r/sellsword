@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import type { ArmySheetStats } from './sheets.js';
+import type { ArmySheetStats, Detachment } from './sheets.js';
 import {
   consumeSupplies,
   deliverMessages,
@@ -46,13 +46,13 @@ function seedArmy(
   return id;
 }
 
+function det(overrides: Partial<Detachment> = {}): Detachment {
+  return { name: 'Foot', size: 1000, notes: '', multiplier: 1, strength: 0, wagons: 0, ...overrides };
+}
+
 function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
   return {
-    infantry: 1000,
-    infantry_strength: 0,
-    cavalry: 0,
-    cavalry_strength: 0,
-    wagons: 0,
+    detachments: [det()],
     noncombatants: 0,
     scouting_range: 1,
     morale: 9,
@@ -154,35 +154,35 @@ describe('consumeSupplies', () => {
 
   it('deducts daily supply consumption', () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 1000, cavalry: 0, noncombatants: 0, supplies: 5000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 1000 })], noncombatants: 0, supplies: 5000 })]]);
     consumeSupplies(db, stats, []);
     expect(stats.get(id)!.supplies).toBe(4000); // 1000 infantry × 1/day
   });
 
   it('does not reduce supplies below 0', () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 50 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 100 })], supplies: 50 })]]);
     consumeSupplies(db, stats, []);
     expect(stats.get(id)!.supplies).toBe(0);
   });
 
   it('reduces morale by 1 when army cannot pay', () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 50, morale: 9 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 100 })], supplies: 50, morale: 9 })]]);
     consumeSupplies(db, stats, []);
     expect(stats.get(id)!.morale).toBe(8);
   });
 
   it('does not reduce morale when army has enough supplies', () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 10000, morale: 9 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 100 })], supplies: 10000, morale: 9 })]]);
     consumeSupplies(db, stats, []);
     expect(stats.get(id)!.morale).toBe(9);
   });
 
   it('does not reduce morale below 1', () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 100, supplies: 0, morale: 1 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 100 })], supplies: 0, morale: 1 })]]);
     consumeSupplies(db, stats, []);
     expect(stats.get(id)!.morale).toBe(1);
   });
@@ -200,7 +200,7 @@ describe('processForage', () => {
 
   it('forages current hex and all 6 adjacent hexes', () => {
     const armyId = seedArmy(db);
-    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0, scouting_range: 1 })]]);
+    const stats = new Map([[armyId, makeStats({ detachments: [], supplies: 0, scouting_range: 1 })]]);
     // Center + 6 neighbors = 7 hexes
     for (const [q, r] of [
       [0, 0],
@@ -222,7 +222,7 @@ describe('processForage', () => {
 
   it('skips exhausted hexes', () => {
     const armyId = seedArmy(db);
-    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0 })]]);
+    const stats = new Map([[armyId, makeStats({ detachments: [], supplies: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 5 });
     seedOrder(db, armyId, 'forage');
 
@@ -233,7 +233,7 @@ describe('processForage', () => {
 
   it('skips armies in the moving set', () => {
     const armyId = seedArmy(db);
-    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0 })]]);
+    const stats = new Map([[armyId, makeStats({ detachments: [], supplies: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100 });
     seedOrder(db, armyId, 'forage');
 
@@ -244,7 +244,7 @@ describe('processForage', () => {
 
   it('extends range to 2 hexes when scouting_range is 2', () => {
     const armyId = seedArmy(db);
-    const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0, scouting_range: 2 })]]);
+    const stats = new Map([[armyId, makeStats({ detachments: [], supplies: 0, scouting_range: 2 })]]);
     seedHex(db, 0, 0, { settlement: 10 }); // range 0
     seedHex(db, 0, 2, { settlement: 10 }); // range 2 (NW twice)
     seedHex(db, 2, -2, { settlement: 10 }); // range 2
@@ -258,7 +258,7 @@ describe('processForage', () => {
 
   it('increments forage_count on each foraged hex', () => {
     const armyId = seedArmy(db);
-    const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
+    const stats = new Map([[armyId, makeStats({ detachments: [] })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 0 });
     seedOrder(db, armyId, 'forage');
 
@@ -272,7 +272,7 @@ describe('processForage', () => {
 
   it('logs revolt risk when any foraged hex has been foraged before', () => {
     const armyId = seedArmy(db);
-    const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
+    const stats = new Map([[armyId, makeStats({ detachments: [] })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 1 });
     seedOrder(db, armyId, 'forage');
 
@@ -284,7 +284,7 @@ describe('processForage', () => {
 
   it('does not log revolt risk when all foraged hexes are fresh', () => {
     const armyId = seedArmy(db);
-    const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
+    const stats = new Map([[armyId, makeStats({ detachments: [] })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 0 });
     seedOrder(db, armyId, 'forage');
 
@@ -690,7 +690,7 @@ describe('postSupplyUpdates', () => {
 
   it('posts an embed to the army channel', async () => {
     const id = seedArmy(db, { name: 'Iron Legion' });
-    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 5000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 1000 })], supplies: 5000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
@@ -706,7 +706,7 @@ describe('postSupplyUpdates', () => {
 
   it('sets the embed color based on days remaining', async () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 5000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 1000 })], supplies: 5000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
@@ -717,7 +717,7 @@ describe('postSupplyUpdates', () => {
 
   it('skips armies with no discord_channel_id', async () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 5000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 1000 })], supplies: 5000 })]]);
 
     const send = vi.fn();
     await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
@@ -737,7 +737,7 @@ describe('postSupplyUpdates', () => {
 
   it('sets embed URL to army sheet when available', async () => {
     const id = seedArmy(db, { name: 'Riders' });
-    const stats = new Map([[id, makeStats({ cavalry: 100, supplies: 10000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 100, multiplier: 10 })], supplies: 10000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ?, army_sheet_url = ? WHERE id = ?')
       .run('ch-2', 'https://docs.google.com/spreadsheets/d/abc', id);
 
@@ -749,7 +749,7 @@ describe('postSupplyUpdates', () => {
 
   it('shows zero date in description when consumption > 0', async () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 1000, supplies: 3000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 1000 })], supplies: 3000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-3', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
@@ -762,7 +762,7 @@ describe('postSupplyUpdates', () => {
 
   it('omits zero date and shows ∞ when consumption is zero', async () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 0, cavalry: 0, supplies: 1000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [], supplies: 1000 })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-4', id);
 
     const send = vi.fn().mockResolvedValue(undefined);
@@ -775,7 +775,7 @@ describe('postSupplyUpdates', () => {
 
   it('logs a warning when channel fetch fails', async () => {
     const id = seedArmy(db);
-    const stats = new Map([[id, makeStats({ infantry: 1000 })]]);
+    const stats = new Map([[id, makeStats({ detachments: [det({ size: 1000 })] })]]);
     db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('bad-ch', id);
 
     const log: string[] = [];

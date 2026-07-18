@@ -94,11 +94,11 @@ const commission: Command = {
       sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}`;
       await shareSheetPublic(sheetId);
       const defaultStats: ArmySheetStats = {
-        infantry: 0, cavalry: 0, wagons: 0, noncombatants: 0,
+        detachments: [], noncombatants: 0,
         morale: 9, resting_morale: 9, max_morale: 12,
         supplies: 0, coin: 0, goods: 0,
         stance: 'allow_passage',
-        infantry_strength: 0, cavalry_strength: 0, scouting_range: 1,
+        scouting_range: 1,
         forced_march: false, night_march: false,
         hex_q: startQ, hex_r: startR,
       };

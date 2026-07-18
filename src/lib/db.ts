@@ -10,6 +10,9 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.exec(DB_SCHEMA);
 
+// Migration: detachments live in the army sheets now; drop the unused table.
+db.exec('DROP TABLE IF EXISTS detachments');
+
 // Migration: add speed column to hexes if absent.
 {
   const hexesCols = db.pragma('table_info(hexes)') as { name: string }[];

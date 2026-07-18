@@ -5,7 +5,7 @@
 import type Database from 'better-sqlite3';
 import { EmbedBuilder, type Client, type TextChannel } from 'discord.js';
 import type { ArmyRow, HexRow, OrderRow } from './db.js'; // type-only: no side effects
-import type { ArmySheetStats } from './sheets.js';
+import { isCavalryOnly, supplyUpkeep, totalWagons, type ArmySheetStats } from './sheets.js';
 import { findPath, hexesInRange } from './hex.js';
 
 type Log = string[];
@@ -45,7 +45,7 @@ export function consumeSupplies(
     const s = stats.get(army.id);
     if (!s) continue;
 
-    const consumption = s.infantry + s.noncombatants + (s.cavalry + s.wagons) * 10;
+    const consumption = supplyUpkeep(s) + s.noncombatants + totalWagons(s) * 10;
     const wasOut = s.supplies < consumption;
     s.supplies = Math.max(0, s.supplies - consumption);
 
@@ -120,7 +120,7 @@ export function processMovement(
     if (!params) continue;
     const onRoad = params.roads_only;
     const forced = s.forced_march;
-    const cavalryOnly = s.infantry === 0 && s.wagons === 0;
+    const cavalryOnly = isCavalryOnly(s);
 
     const currentHex = database
       .prepare('SELECT speed FROM hexes WHERE q = ? AND r = ?')
@@ -313,7 +313,7 @@ export async function postSupplyUpdates(
     const s = stats.get(army.id);
     if (!s) continue;
 
-    const consumption = s.infantry + s.noncombatants + (s.cavalry + s.wagons) * 10;
+    const consumption = supplyUpkeep(s) + s.noncombatants + totalWagons(s) * 10;
     const daysLeft = consumption > 0 ? Math.floor(s.supplies / consumption) : null;
 
     let description =

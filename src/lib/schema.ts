@@ -47,16 +47,6 @@ export const DB_SCHEMA = `
     name            TEXT
   );
 
-  CREATE TABLE IF NOT EXISTS detachments (
-    id       INTEGER PRIMARY KEY,
-    army_id  INTEGER NOT NULL REFERENCES armies(id),
-    name     TEXT,
-    type     TEXT NOT NULL CHECK(type IN ('infantry', 'heavy_infantry', 'cavalry', 'heavy_cavalry', 'skirmisher')),
-    size     INTEGER NOT NULL,
-    wagons   INTEGER NOT NULL DEFAULT 0,
-    honors   TEXT NOT NULL DEFAULT '[]'
-  );
-
   CREATE TABLE IF NOT EXISTS orders (
     id           INTEGER PRIMARY KEY,
     army_id      INTEGER NOT NULL REFERENCES armies(id),

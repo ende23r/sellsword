@@ -67,11 +67,11 @@ describe('/message', () => {
     });
     mockFetchArmyStats.mockImplementation((sheetId: string) =>
       Promise.resolve({
-        infantry: 0, cavalry: 0, wagons: 0, noncombatants: 0,
+        detachments: [], noncombatants: 0,
         morale: 9, resting_morale: 9, max_morale: 12,
         supplies: 0, coin: 0, goods: 0,
         stance: 'allow_passage' as const,
-        infantry_strength: 0, cavalry_strength: 0, scouting_range: 1,
+        scouting_range: 1,
         forced_march: false, night_march: false,
         hex_q: sheetId === 'sheet-sender' ? 0 : 3,
         hex_r: 0,

@@ -179,6 +179,6 @@ describe('checkStatsNamedRanges', () => {
   it('fails when the sheet has no named ranges at all', async () => {
     const results = await checkStatsNamedRanges(makeNamedRangeSheets([]) as any, 'sheet-id');
     expect(results[0].ok).toBe(false);
-    expect(results[0].detail).toContain('infantry');
+    expect(results[0].detail).toContain('detachments');
   });
 });

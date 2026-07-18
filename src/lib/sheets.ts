@@ -16,11 +16,22 @@ import type { CommanderRow } from './db.js';
 
 // ── Army sheet stats (source of truth; all army data lives here) ──────────────
 
-export type ArmySheetStats = {
-  // Logistics counts
-  infantry: number;
-  cavalry: number;
+// One row of the sheet's detachments table. Multiplier (daily supplies eaten
+// per soldier) and strength are explicit rather than derived from a type, so
+// GMs can invent custom detachment types without bot changes; notes is free
+// text for type, honors, and anything else.
+export type Detachment = {
+  name: string;
+  size: number;
+  notes: string;
+  multiplier: number;
+  strength: number;
   wagons: number;
+};
+
+export type ArmySheetStats = {
+  // Composition (GM-owned; the bot reads and derives totals, never writes)
+  detachments: Detachment[];
   noncombatants: number;
   // Resources
   morale: number;
@@ -28,14 +39,12 @@ export type ArmySheetStats = {
   supplies: number;
   coin: number;
   goods: number;
-  // Position (source of truth; written to Hex cell as "q,r")
+  // Position (source of truth; written to hex cell as "q,r")
   hex_q: number;
   hex_r: number;
   // State
   stance: 'allow_passage' | 'engage';
-  // Combat strengths (sheet-calculated; bot reads only)
-  infantry_strength: number;
-  cavalry_strength: number;
+  // Sheet-calculated (bot reads only)
   scouting_range: number;
   // Additional stats
   max_morale: number;
@@ -43,15 +52,36 @@ export type ArmySheetStats = {
   night_march: boolean;
 };
 
+// ── Derived totals ────────────────────────────────────────────────────────────
+
+export function totalWagons(stats: Pick<ArmySheetStats, 'detachments'>): number {
+  return stats.detachments.reduce((sum, d) => sum + d.wagons, 0);
+}
+
+export function totalStrength(stats: Pick<ArmySheetStats, 'detachments'>): number {
+  return stats.detachments.reduce((sum, d) => sum + d.strength, 0);
+}
+
+export function supplyUpkeep(stats: Pick<ArmySheetStats, 'detachments'>): number {
+  return Math.round(stats.detachments.reduce((sum, d) => sum + d.size * d.multiplier, 0));
+}
+
+// Mounted troops eat 10×; a multiplier of 10 or more is what distinguishes a
+// cavalry detachment as far as the bot is concerned (forced-march speed).
+export function isCavalryOnly(stats: Pick<ArmySheetStats, 'detachments'>): boolean {
+  return (
+    stats.detachments.length > 0 && stats.detachments.every((d) => d.multiplier >= 10 && d.wagons === 0)
+  );
+}
+
 // Every army sheet must define these named ranges (Data → Named ranges in the
-// Sheets UI), each covering the single cell that holds that stat. Names match
-// the ArmySheetStats keys exactly. GMs are free to lay the sheet out however
-// they like — named ranges follow their cell when rows or columns move, so
-// this is the whole contract between the bot and the sheet.
-export const STAT_RANGE_NAMES = [
-  'infantry',
-  'cavalry',
-  'wagons',
+// Sheets UI). Each scalar range covers the single cell that holds that stat;
+// `detachments` covers the detachments table's data rows (columns
+// name | size | notes | multiplier | strength | wagons, header row excluded —
+// draw it generously downward, blank rows are ignored). GMs are free to lay
+// the sheet out however they like — named ranges follow their cell when rows
+// or columns move, so this is the whole contract between the bot and the sheet.
+export const SCALAR_RANGE_NAMES = [
   'noncombatants',
   'morale',
   'resting_morale',
@@ -60,23 +90,58 @@ export const STAT_RANGE_NAMES = [
   'goods',
   'hex',
   'stance',
-  'infantry_strength',
-  'cavalry_strength',
   'scouting_range',
   'max_morale',
   'forced_march',
   'night_march',
 ] as const;
 
+export const STAT_RANGE_NAMES = [...SCALAR_RANGE_NAMES, 'detachments'] as const;
+
+export type ScalarRangeName = (typeof SCALAR_RANGE_NAMES)[number];
 export type StatRangeName = (typeof STAT_RANGE_NAMES)[number];
-export type StatCells = Partial<Record<StatRangeName, string | number | null>>;
+export type StatCells = Partial<Record<ScalarRangeName, string | number | null>>;
 
 export function missingStatRanges(definedNames: string[]): StatRangeName[] {
   return STAT_RANGE_NAMES.filter((name) => !definedNames.includes(name));
 }
 
-export function parseSheetStats(cells: StatCells): ArmySheetStats {
-  type RawCell = string | number | null | undefined;
+type RawCell = string | number | null | undefined;
+
+const blank = (v: RawCell): boolean => v === null || v === undefined || String(v).trim() === '';
+
+export function parseDetachments(rows: RawCell[][]): Detachment[] {
+  const detachments: Detachment[] = [];
+
+  rows.forEach((row, i) => {
+    const [name, size, notes, multiplier, strength, wagons] = [0, 1, 2, 3, 4, 5].map((c) => row[c]);
+    if ([name, size, notes, multiplier, strength, wagons].every(blank)) return;
+
+    const label = `Detachment row ${i + 1} ("${String(name ?? '').trim() || 'unnamed'}")`;
+    const numCol = (v: RawCell, col: string, fallback: number | null): number => {
+      if (blank(v)) {
+        if (fallback === null) throw new Error(`${label}: ${col} is required.`);
+        return fallback;
+      }
+      const n = Number(v);
+      if (isNaN(n) || n < 0) throw new Error(`${label}: ${col} "${String(v).trim()}" is not a valid number.`);
+      return n;
+    };
+
+    detachments.push({
+      name: String(name ?? '').trim(),
+      size: Math.round(numCol(size, 'size', null)),
+      notes: String(notes ?? '').trim(),
+      multiplier: numCol(multiplier, 'multiplier', 1),
+      strength: Math.round(numCol(strength, 'strength', 0)),
+      wagons: Math.round(numCol(wagons, 'wagons', 0)),
+    });
+  });
+
+  return detachments;
+}
+
+export function parseSheetStats(cells: StatCells, detachmentRows: RawCell[][]): ArmySheetStats {
   const num = (v: RawCell, fallback: number): number => {
     const n = Number(v);
     return v !== null && v !== undefined && v !== '' && !isNaN(n) ? Math.round(n) : fallback;
@@ -106,9 +171,7 @@ export function parseSheetStats(cells: StatCells): ArmySheetStats {
   const hex = parseHex(cells.hex);
 
   return {
-    infantry: num(cells.infantry, 0),
-    cavalry: num(cells.cavalry, 0),
-    wagons: num(cells.wagons, 0),
+    detachments: parseDetachments(detachmentRows),
     noncombatants: num(cells.noncombatants, 0),
     morale: num(cells.morale, 9),
     resting_morale: num(cells.resting_morale, 9),
@@ -118,8 +181,6 @@ export function parseSheetStats(cells: StatCells): ArmySheetStats {
     hex_q: hex.q,
     hex_r: hex.r,
     stance: stance(cells.stance),
-    infantry_strength: num(cells.infantry_strength, 0),
-    cavalry_strength: num(cells.cavalry_strength, 0),
     scouting_range: num(cells.scouting_range, 1),
     max_morale: num(cells.max_morale, 12),
     forced_march: bool(cells.forced_march),
@@ -280,31 +341,29 @@ export async function fetchArmyStats(sheetId: string): Promise<ArmySheetStats> {
 
   const cells: StatCells = {};
   const valueRanges = res.data.valueRanges ?? [];
-  STAT_RANGE_NAMES.forEach((name, i) => {
+  SCALAR_RANGE_NAMES.forEach((name, i) => {
     cells[name] = (valueRanges[i]?.values?.[0]?.[0] ?? null) as string | number | null;
   });
-  return parseSheetStats(cells);
+  // `detachments` is requested last, after the scalars.
+  const detachmentRows = (valueRanges[SCALAR_RANGE_NAMES.length]?.values ?? []) as RawCell[][];
+  return parseSheetStats(cells, detachmentRows);
 }
 
+// The ranges the bot owns and writes back. Everything else — detachments,
+// noncombatants, resting_morale, max_morale, scouting_range — is GM-owned:
+// the bot reads it but never writes, so GM edits are never clobbered.
 export function statWriteData(
   stats: ArmySheetStats,
 ): { range: StatRangeName; values: (string | number)[][] }[] {
   return [
-    { range: 'infantry', values: [[stats.infantry]] },
-    { range: 'cavalry', values: [[stats.cavalry]] },
-    { range: 'wagons', values: [[stats.wagons]] },
-    { range: 'noncombatants', values: [[stats.noncombatants]] },
     { range: 'morale', values: [[stats.morale]] },
-    { range: 'resting_morale', values: [[stats.resting_morale]] },
     { range: 'supplies', values: [[stats.supplies]] },
     { range: 'coin', values: [[stats.coin]] },
     { range: 'goods', values: [[stats.goods]] },
     { range: 'hex', values: [[`${stats.hex_q},${stats.hex_r}`]] },
     { range: 'stance', values: [[stats.stance]] },
-    { range: 'max_morale', values: [[stats.max_morale]] },
     { range: 'forced_march', values: [[stats.forced_march ? 1 : 0]] },
     { range: 'night_march', values: [[stats.night_march ? 1 : 0]] },
-    // infantry_strength, cavalry_strength, scouting_range are sheet-calculated; not written.
   ];
 }
 

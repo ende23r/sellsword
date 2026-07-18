@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { ArmyRow } from './db.js';
-import type { ArmySheetStats } from './sheets.js';
+import { totalStrength, type ArmySheetStats } from './sheets.js';
 
 export type SideResult = {
   armyId: number;
@@ -29,9 +29,9 @@ export type BattleOutcome = {
 };
 
 export function effectiveStrength(
-  stats: Pick<ArmySheetStats, 'infantry_strength' | 'cavalry_strength' | 'noncombatants'>,
+  stats: Pick<ArmySheetStats, 'detachments' | 'noncombatants'>,
 ): number {
-  return stats.infantry_strength + stats.noncombatants + stats.cavalry_strength;
+  return totalStrength(stats) + stats.noncombatants;
 }
 
 export function numericalAdvantage(stronger: number, weaker: number): number {
@@ -158,23 +158,21 @@ export function resolveBattle(
     loserCaptured = diff >= 6 ? captureRoll <= 2 : captureRoll <= 1;
   }
 
-  const applyCasualties = (s: ArmySheetStats, casualtyPct: number, moraleDelta: number) => {
-    const factor = (100 - casualtyPct) / 100;
-    s.infantry = Math.max(0, Math.round(s.infantry * factor));
-    s.cavalry = Math.max(0, Math.round(s.cavalry * factor));
-    s.noncombatants = Math.max(0, Math.round(s.noncombatants * factor));
+  // Casualty percentages are reported but not applied — the GM subtracts them
+  // from detachment rows on the army sheets by hand.
+  // TODO(uncertain): we may want to automate casualty application in the
+  // future (e.g. proportional distribution across detachments), once we know
+  // how GMs actually apply them in play.
+  const applyMorale = (s: ArmySheetStats, moraleDelta: number) => {
     s.morale = Math.min(s.max_morale, Math.max(1, s.morale + moraleDelta));
   };
 
   if (winner === 'a') {
-    applyCasualties(statsA, victorCasualtyPct, victorMoraleDelta);
-    applyCasualties(statsB, loserCasualtyPct, loserMoraleDelta);
+    applyMorale(statsA, victorMoraleDelta);
+    applyMorale(statsB, loserMoraleDelta);
   } else if (winner === 'b') {
-    applyCasualties(statsB, victorCasualtyPct, victorMoraleDelta);
-    applyCasualties(statsA, loserCasualtyPct, loserMoraleDelta);
-  } else {
-    applyCasualties(statsA, 5, 0);
-    applyCasualties(statsB, 5, 0);
+    applyMorale(statsB, victorMoraleDelta);
+    applyMorale(statsA, loserMoraleDelta);
   }
 
   if (attackerPenalty) {

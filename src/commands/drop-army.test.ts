@@ -46,10 +46,10 @@ function makeInteraction({ hasArchivedCategory = false } = {}) {
 describe('/drop-army', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('deletes all orders, detachments, and the army from the DB', async () => {
+  it('deletes all orders and the army from the DB', async () => {
     const { default: command } = await import('./drop-army.js');
     await command.execute(makeInteraction() as any);
-    expect(mockRun).toHaveBeenCalledTimes(3); // DELETE orders, DELETE detachments, DELETE army
+    expect(mockRun).toHaveBeenCalledTimes(2); // DELETE orders, DELETE army
   });
 
   it('moves the army channel to the Archived category', async () => {

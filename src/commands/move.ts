@@ -2,7 +2,7 @@ import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getHex } from '../lib/db.js';
 import { requirePlayerArmy } from '../lib/command-helpers.js';
 import { hexDistance } from '../lib/hex.js';
-import { fetchArmyStats } from '../lib/sheets.js';
+import { fetchArmyStats, totalWagons } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const move: Command = {
@@ -61,7 +61,7 @@ const move: Command = {
       return;
     }
 
-    if (!roadsOnly && armyStats.wagons > 0) {
+    if (!roadsOnly && totalWagons(armyStats) > 0) {
       await interaction.editReply(
         '⚠️ Armies with wagons cannot travel off-road. Use `roads_only: true` or detach your wagons first.',
       );

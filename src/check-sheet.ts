@@ -3,8 +3,12 @@ import {
   extractSheetId,
   fetchArmyStats,
   fetchDefinedRangeNames,
+  isCavalryOnly,
   missingStatRanges,
   statWriteData,
+  supplyUpkeep,
+  totalStrength,
+  totalWagons,
 } from './lib/sheets.js';
 
 // Validates a GM's army sheet and prints what the bot reads from it.
@@ -43,8 +47,21 @@ try {
 
 console.log('Stats as the bot reads them:');
 for (const [key, value] of Object.entries(stats)) {
+  if (key === 'detachments') continue;
   console.log(`  ${key.padEnd(18)} ${value}`);
 }
+
+console.log(`\nDetachments (${stats.detachments.length}):`);
+for (const d of stats.detachments) {
+  console.log(
+    `  ${(d.name || '(unnamed)').padEnd(24)} size ${String(d.size).padEnd(6)} ×${String(d.multiplier).padEnd(4)} strength ${String(d.strength).padEnd(6)} wagons ${String(d.wagons).padEnd(4)} ${d.notes}`,
+  );
+}
+console.log('Derived totals:');
+console.log(`  supply upkeep/day  ${supplyUpkeep(stats) + stats.noncombatants + totalWagons(stats) * 10}`);
+console.log(`  strength           ${totalStrength(stats)}`);
+console.log(`  wagons             ${totalWagons(stats)}`);
+console.log(`  cavalry-only       ${isCavalryOnly(stats)}`);
 
 console.log('\nValues the bot would write back on the next sync:');
 for (const { range, values } of statWriteData(stats)) {

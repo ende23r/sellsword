@@ -32,7 +32,6 @@ const dropArmy: Command = {
     }
 
     db.prepare('DELETE FROM orders WHERE army_id = ?').run(armyId);
-    db.prepare('DELETE FROM detachments WHERE army_id = ?').run(armyId);
     db.prepare('DELETE FROM armies WHERE id = ?').run(armyId);
 
     let channelNote = '';
