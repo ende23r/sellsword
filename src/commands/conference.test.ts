@@ -32,6 +32,9 @@ function makeGuild(categoryExists = false) {
       create: mockChannelCreate,
       fetch: mockChannelFetch,
     },
+    members: {
+      fetch: vi.fn().mockImplementation((id: string) => Promise.resolve({ id, user: { id } })),
+    },
   };
 }
 

@@ -1,5 +1,5 @@
 import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import type { TextChannel } from 'discord.js';
+import type { GuildMember, TextChannel } from 'discord.js';
 import {
   getArmiesAtHex,
   getArmyByDiscordId,
@@ -41,6 +41,11 @@ const conference: Command = {
       .map((a) => getCommanderByArmyId(a.id)?.discord_user_id)
       .filter((id): id is string => !!id);
 
+    // Fetch GuildMembers — permissionOverwrites.create() requires resolved members, not raw IDs
+    const members = (
+      await Promise.all(userIds.map((id) => guild.members.fetch(id).catch(() => null)))
+    ).filter((m): m is GuildMember => m !== null);
+
     // Find or create the Conferences category
     let category = guild.channels.cache.find(
       (ch) => ch.name === 'Conferences' && ch.type === ChannelType.GuildCategory,
@@ -68,16 +73,16 @@ const conference: Command = {
         parent: category.id,
         permissionOverwrites: [
           { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
-          ...userIds.map((userId) => ({
-            id: userId,
+          ...members.map((member) => ({
+            id: member,
             allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
           })),
         ],
       })) as TextChannel;
       saveConferenceChannel(q, r, channel.id);
     } else {
-      for (const userId of userIds) {
-        await channel.permissionOverwrites.create(userId, {
+      for (const member of members) {
+        await channel.permissionOverwrites.create(member, {
           ViewChannel: true,
           SendMessages: true,
         });
