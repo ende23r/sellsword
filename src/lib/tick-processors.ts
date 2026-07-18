@@ -63,7 +63,8 @@ export function processNightMarchMovement(
     const s = stats.get(army.id);
     if (!s || !s.night_march) continue;
 
-    const params = JSON.parse(order.parameters) as { roads_only: boolean };
+    const params = parseOrderParams(database, order, log);
+    if (!params) continue;
     if (!params.roads_only) {
       log.push(`⚠️ **${army.name ?? army.id}** cannot night march off-road.`);
       continue;
@@ -71,7 +72,7 @@ export function processNightMarchMovement(
 
     // 6 miles/night = 1 hex; forced march adds another (12 miles = 2 hexes)
     const hexesAllowed = s.forced_march ? 2 : 1;
-    advanceArmy(database, army, order, hexesAllowed, validCoords, stats, factions, log);
+    advanceArmy(database, army, order, params, hexesAllowed, validCoords, stats, factions, log);
     rollMarchMorale(stats, army.id, army.name ?? String(army.id), 'night', log);
   }
 }
@@ -107,7 +108,8 @@ export function processMovement(
     const s = stats.get(army.id);
     if (!s) continue;
 
-    const params = JSON.parse(order.parameters) as { roads_only: boolean };
+    const params = parseOrderParams(database, order, log);
+    if (!params) continue;
     const onRoad = params.roads_only;
     const forced = s.forced_march;
     const cavalryOnly = s.infantry === 0 && s.wagons === 0;
@@ -126,7 +128,7 @@ export function processMovement(
     const hexesAllowed = Math.floor((hexSpeed * speedMultiplier) / 6);
     if (hexesAllowed === 0) continue;
 
-    const didMove = advanceArmy(database, army, order, hexesAllowed, validCoords, stats, factions, log);
+    const didMove = advanceArmy(database, army, order, params, hexesAllowed, validCoords, stats, factions, log);
     if (didMove) moved.add(army.id);
 
     if (forced) {
@@ -338,10 +340,28 @@ function buildValidCoords(database: Database.Database): Set<string> {
   return new Set(hexes.map((h) => `${h.q},${h.r}`));
 }
 
+type MoveOrderParams = { dest_q: number; dest_r: number; roads_only: boolean };
+
+// A malformed parameters blob must not abort the whole tick loop — cancel just that order.
+function parseOrderParams(
+  database: Database.Database,
+  order: OrderRow,
+  log: Log,
+): MoveOrderParams | null {
+  try {
+    return JSON.parse(order.parameters) as MoveOrderParams;
+  } catch {
+    log.push(`⚠️ Order ${order.id} (army ${order.army_id}) has malformed parameters — order cancelled.`);
+    markOrderProcessed(database, order.id);
+    return null;
+  }
+}
+
 function advanceArmy(
   database: Database.Database,
   army: ArmyRow,
   order: OrderRow,
+  params: MoveOrderParams,
   hexesAllowed: number,
   validCoords: Set<string>,
   stats: Map<number, ArmySheetStats>,
@@ -351,7 +371,6 @@ function advanceArmy(
   const s = stats.get(army.id);
   if (!s) return false;
 
-  const params = JSON.parse(order.parameters) as { dest_q: number; dest_r: number };
   const from = { q: s.hex_q, r: s.hex_r };
   const to = { q: params.dest_q, r: params.dest_r };
 

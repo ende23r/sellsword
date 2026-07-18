@@ -9,6 +9,7 @@ import {
   postSupplyUpdates,
   processForage,
   processMovement,
+  processNightMarchMovement,
   supplyColor,
 } from './tick-processors.js';
 
@@ -726,5 +727,69 @@ describe('postSupplyUpdates', () => {
     };
     await postSupplyUpdates(db, stats, badClient as never, log, new Date());
     expect(log.some((l) => l.includes('supply update'))).toBe(true);
+  });
+});
+
+// ── malformed order parameters ────────────────────────────────────────────────
+
+describe('malformed order parameters', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+  });
+
+  function seedMalformedOrder(db: Database.Database, armyId: number): void {
+    db.prepare("INSERT INTO orders (army_id, type, parameters) VALUES (?, 'move', 'not-json{')").run(
+      armyId,
+    );
+  }
+
+  it('processMovement cancels a malformed order and still moves other armies', () => {
+    seedHex(db, 0, 0);
+    seedHex(db, 1, 0);
+    const bad = seedArmy(db);
+    const good = seedArmy(db);
+    seedMalformedOrder(db, bad);
+    seedOrder(db, good, 'move', { dest_q: 1, dest_r: 0, roads_only: false });
+    const stats = new Map([
+      [bad, makeStats()],
+      [good, makeStats()],
+    ]);
+    const log: string[] = [];
+
+    const moved = processMovement(db, stats, log);
+
+    expect(moved.has(good)).toBe(true);
+    expect(stats.get(good)!.hex_q).toBe(1);
+    const row = db
+      .prepare('SELECT processed_at FROM orders WHERE army_id = ?')
+      .get(bad) as { processed_at: string | null };
+    expect(row.processed_at).not.toBeNull();
+    expect(log.some((l) => l.includes('malformed'))).toBe(true);
+  });
+
+  it('processNightMarchMovement cancels a malformed order and still moves other armies', () => {
+    seedHex(db, 0, 0);
+    seedHex(db, 1, 0);
+    const bad = seedArmy(db);
+    const good = seedArmy(db);
+    seedMalformedOrder(db, bad);
+    seedOrder(db, good, 'move', { dest_q: 1, dest_r: 0, roads_only: true });
+    const stats = new Map([
+      [bad, makeStats({ night_march: true })],
+      [good, makeStats({ night_march: true })],
+    ]);
+    const log: string[] = [];
+
+    processNightMarchMovement(db, stats, log);
+
+    expect(stats.get(good)!.hex_q).toBe(1);
+    const row = db
+      .prepare('SELECT processed_at FROM orders WHERE army_id = ?')
+      .get(bad) as { processed_at: string | null };
+    expect(row.processed_at).not.toBeNull();
+    expect(log.some((l) => l.includes('malformed'))).toBe(true);
   });
 });
