@@ -38,11 +38,11 @@ const unqueue: Command = {
       return;
     }
 
-    // Remove the queue role if it exists
+    // Remove the queue role if it exists and the user is still a member
     const guild = interaction.guild!;
-    const member = await guild.members.fetch(user.id);
+    const member = await guild.members.fetch(user.id).catch(() => null);
     const role = guild.roles.cache.find((r) => r.name === QUEUE_ROLE_NAME);
-    if (role) await member.roles.remove(role);
+    if (role && member) await member.roles.remove(role);
 
     // Remove the row from the admin sheet (non-fatal)
     try {

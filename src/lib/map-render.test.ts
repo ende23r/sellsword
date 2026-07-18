@@ -1,12 +1,20 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import { armyInitials, armyRingOffsets, getArmiesForMap, getPlayerMapHexes, trianglePoints } from './map-render.js';
+import { armyInitials, armyRingOffsets, getArmiesForMap, getPlayerMapHexes, renderMap, trianglePoints } from './map-render.js';
 import type { HexRow } from './db.js';
 
 function makeHex(q: number, r: number): HexRow {
   return { id: q * 1000 + r, q, r, terrain: 'flatland', settlement: 0, roads: '[]', rivers: '[]', forage_count: 0, last_foraged: null, speed: 6 };
 }
+
+describe('renderMap', () => {
+  it('renders hexes with malformed roads/rivers JSON instead of throwing', async () => {
+    const hex = { ...makeHex(0, 0), roads: 'not-json{', rivers: 'also-bad' };
+    const png = await renderMap([hex], []);
+    expect(png).toBeInstanceOf(Buffer);
+  });
+});
 
 describe('armyInitials', () => {
   it('takes first letter of alpha words and leading digits of numeric words', () => {

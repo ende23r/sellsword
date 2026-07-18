@@ -51,11 +51,11 @@ const queue: Command = {
       'INSERT INTO queue (discord_user_id, discord_username, added_by_id) VALUES (?, ?, ?)',
     ).run(user.id, user.username, interaction.user.id);
 
-    // Assign queue role if it exists in the guild
+    // Assign queue role if it exists in the guild and the user is still a member
     const guild = interaction.guild!;
-    const member = await guild.members.fetch(user.id);
+    const member = await guild.members.fetch(user.id).catch(() => null);
     const role = guild.roles.cache.find((r) => r.name === QUEUE_ROLE_NAME);
-    if (role) await member.roles.add(role);
+    if (role && member) await member.roles.add(role);
 
     const timestamp = new Date().toISOString();
     try {

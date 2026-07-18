@@ -253,8 +253,10 @@ export async function deliverMessages(
         database.prepare('UPDATE messages SET delivered = 1 WHERE id = ?').run(msg.id);
         log.push(`📨 Message delivered to channel ${msg.recipient_channel_id}.`);
       }
-    } catch {
-      log.push(`⚠️ Failed to deliver message ${msg.id}.`);
+    } catch (err) {
+      log.push(
+        `⚠️ Failed to deliver message ${msg.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }

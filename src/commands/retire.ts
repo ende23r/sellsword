@@ -18,14 +18,15 @@ const retire: Command = {
 
     const guild = interaction.guild!;
     const commanderUser = interaction.options.getUser('commander', true);
-    const member = await guild.members.fetch(commanderUser.id);
+    // Member may have already left the guild — still revoke channel access below
+    const member = await guild.members.fetch(commanderUser.id).catch(() => null);
 
     const factionRoleIds = new Set(
       (db.prepare('SELECT discord_role_id FROM factions').all() as { discord_role_id: string }[])
         .map((r) => r.discord_role_id),
     );
-    const factionRole = member.roles.cache.find((r) => factionRoleIds.has(r.id));
-    if (factionRole) {
+    const factionRole = member?.roles.cache.find((r) => factionRoleIds.has(r.id));
+    if (factionRole && member) {
       await member.roles.remove(factionRole);
     }
 

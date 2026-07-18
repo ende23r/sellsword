@@ -53,4 +53,13 @@ describe('/unqueue', () => {
     await command.execute(interaction as any);
     expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('✅'));
   });
+
+  it('still succeeds when the member cannot be fetched', async () => {
+    vi.mocked(removeFromQueueSheet).mockResolvedValue(undefined);
+    const { default: command } = await import('./unqueue.js');
+    const interaction = makeInteraction();
+    interaction.guild.members.fetch = vi.fn().mockRejectedValue(new Error('Unknown Member'));
+    await command.execute(interaction as any);
+    expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('✅'));
+  });
 });

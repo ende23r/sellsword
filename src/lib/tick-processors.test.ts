@@ -550,6 +550,23 @@ describe('deliverMessages', () => {
     expect(msg.delivered).toBe(1);
     expect(log.some((l) => l.includes('no army channel'))).toBe(true);
   });
+
+  it('includes the error detail in the log when delivery fails', async () => {
+    const past = new Date(Date.now() - 1000).toISOString();
+    insertMessage(db, past);
+
+    const log: string[] = [];
+    const mockClient = {
+      channels: { fetch: vi.fn().mockRejectedValue(new Error('Missing Access')) },
+    };
+
+    await deliverMessages(db, mockClient as never, log);
+
+    expect(log.some((l) => l.includes('Missing Access'))).toBe(true);
+    // Not marked delivered — will retry next tick
+    const msg = db.prepare('SELECT delivered FROM messages').get() as { delivered: number };
+    expect(msg.delivered).toBe(0);
+  });
 });
 
 // ── formatDateUTC ─────────────────────────────────────────────────────────────

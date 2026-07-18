@@ -51,6 +51,16 @@ describe('/queue', () => {
     expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('✅'));
   });
 
+  it('still succeeds when the member cannot be fetched', async () => {
+    const db = (await import('../lib/db.js')).default as any;
+    db.prepare.mockReturnValue({ get: vi.fn().mockReturnValue(undefined), run: vi.fn() });
+    const { default: command } = await import('./queue.js');
+    const interaction = makeInteraction();
+    interaction.guild.members.fetch = vi.fn().mockRejectedValue(new Error('Unknown Member'));
+    await command.execute(interaction as any);
+    expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('✅'));
+  });
+
   it('rejects a player who is already in the game', async () => {
     const db = (await import('../lib/db.js')).default as any;
     db.prepare.mockReturnValue({ get: vi.fn().mockReturnValue({ id: 1 }) });

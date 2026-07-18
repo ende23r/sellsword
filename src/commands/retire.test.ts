@@ -95,6 +95,16 @@ describe('/retire', () => {
     expect(mockRemoveRole).not.toHaveBeenCalled();
   });
 
+  it('still revokes channel access when the member has left the guild', async () => {
+    const { default: command } = await import('./retire.js');
+    const interaction = makeInteraction();
+    interaction.guild.members.fetch = vi.fn().mockRejectedValue(new Error('Unknown Member'));
+    await command.execute(interaction as any);
+    expect(mockRemoveRole).not.toHaveBeenCalled();
+    expect(mockDeleteOverwrite).toHaveBeenCalledWith('user-1');
+    expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('✅'));
+  });
+
   it('still succeeds when the army channel is not found in cache', async () => {
     const { default: command } = await import('./retire.js');
     const interaction = makeInteraction({ channelInCache: false });

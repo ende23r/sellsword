@@ -129,7 +129,7 @@ export async function renderMap(
     if (!visible) continue;
 
     // Roads: draw from center toward each neighbor that also has a road on the connecting edge
-    const roads: string[] = JSON.parse(hex.roads);
+    const roads = parseDirections(hex.roads);
     for (const dir of roads) {
       const neighbor = neighborCoordForDirection(hex.q, hex.r, dir);
       const neighborHex = hexes.find((h) => h.q === neighbor.q && h.r === neighbor.r);
@@ -148,7 +148,7 @@ export async function renderMap(
     }
 
     // Rivers: draw along the shared hex edge (between two corner points)
-    const rivers: string[] = JSON.parse(hex.rivers);
+    const rivers = parseDirections(hex.rivers);
     for (const dir of rivers) {
       const edgeCorners = RIVER_EDGE_CORNERS[dir];
       if (!edgeCorners) continue;
@@ -264,6 +264,16 @@ export function armyRingOffsets(count: number, ringRadius: number): Array<[numbe
 }
 
 // North-pointing pentagon: first vertex at -90° (top), then every 72°
+// Roads/rivers come from seed JSON — a bad blob should degrade to "none", not kill the render
+function parseDirections(json: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 function pentagonPoints(cx: number, cy: number, r: number): string {
   return Array.from({ length: 5 }, (_, i) => {
     const angle = (Math.PI / 180) * (-90 + i * 72);
