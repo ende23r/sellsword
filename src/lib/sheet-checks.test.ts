@@ -43,7 +43,7 @@ describe('checkQueueTab', () => {
 
   it('does not check headers when tab is missing', async () => {
     const sheets = makeSheets({ tabs: [] });
-    const results = await checkQueueTab(sheets as any, 'sheet-id');
+    await checkQueueTab(sheets as any, 'sheet-id');
     expect(sheets.spreadsheets.values.get).not.toHaveBeenCalled();
   });
 

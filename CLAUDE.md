@@ -22,6 +22,7 @@ npm run seed-factions                          # seed from faction-seed.json
 npm run seed-factions -- factions/my-game.json # seed from a specific file
 npm test             # run all tests (vitest)
 npm run typecheck    # type-check without emitting
+npm run lint         # lint with ESLint (recommended rules; Prettier owns formatting)
 npm run format       # format all files with Prettier
 ```
 

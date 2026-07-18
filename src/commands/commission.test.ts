@@ -1,7 +1,5 @@
 import { ChannelType } from 'discord.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { notifyAdmin } from '../lib/admin-notify.js';
-import { upsertFaction } from '../lib/faction-ops.js';
 
 vi.mock('../lib/admin-notify.js', () => ({ notifyAdmin: vi.fn() }));
 vi.mock('../lib/faction-ops.js', () => ({ upsertFaction: vi.fn().mockReturnValue(1) }));

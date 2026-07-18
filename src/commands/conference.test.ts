@@ -88,9 +88,7 @@ describe('/conference', () => {
       return match?.[1] ?? null;
     });
     // Both armies at (3,5)
-    mockFetchArmyStats.mockImplementation((sheetId: string) =>
-      Promise.resolve({ hex_q: 3, hex_r: 5 }),
-    );
+    mockFetchArmyStats.mockImplementation(() => Promise.resolve({ hex_q: 3, hex_r: 5 }));
   });
 
   it('replies with error when not in a guild', async () => {
