@@ -2,15 +2,25 @@
 
 A Discord bot for running Cataphracts.
 
+## Thesis
+
+**Automate procedurally wherever reasonable; put everything else in Google Sheets for the GM to tinker with.**
+
+If a mechanic can just happen, it does: supplies are eaten, armies march, forage comes in, goods sell to the local market — deterministically, at the daily tick, with no human in the loop. The bot exists to grind through that bookkeeping so nobody has to.
+
+Everything that *isn't* automated is deliberately surfaced in Google Sheets, where a non-technical GM has full control: army composition (detachments with explicit multipliers and strengths, so custom troop types need no code changes), goods inventories, market demands, casualties after a battle, repositioning an army by editing its Hex cell. The bot treats those as GM-owned — it reads them, validates them loudly (`npm run check-sheet`, warnings in the tick log), and never overwrites them, so nothing a GM types can be clobbered. There are no admin commands for things a sheet edit can do.
+
+The line between the two moves over time — when a manual process proves routine enough to automate (as selling goods did), it crosses over — but every mechanic should live clearly on one side or the other.
+
 ## Architecture
 
-### Design principle
+### Player interaction
 
-The bot follows a strict separation between **player interaction** and **game state changes**:
+The bot separates **player interaction** from **game state changes**:
 
 - **Queries** (read-only): players can ask about their army, the map, pending orders, etc. at any time. These never mutate state.
-- **Order submission**: players submit orders at any time. Orders are stored as pending records in SQLite and immediately confirmed to the player. Submitting a new order of the same type replaces the previous one.
-- **Tick processing**: three times per day, the bot reads all pending orders and current game state, applies game mechanics deterministically, writes the results back to SQLite, and posts a summary to the admin channel.
+- **Order submission**: players submit orders at any time. Orders are stored as pending records in SQLite and immediately confirmed to the player. Submitting a new order replaces the previous one.
+- **Tick processing**: three times per day, the bot reads all pending orders and current game state, applies game mechanics deterministically, writes the results back, and posts a summary to the admin channel.
 
 Between ticks, game state is frozen. The outcome of any tick is fully determined by: current army state, current pending orders, army settings (pace, stance), and the map. There are no hidden rolls until the tick fires.
 
@@ -18,14 +28,9 @@ Army **settings** (pace, stance) are a special case: they are army properties th
 
 ### Storage
 
-All game state lives in a local **SQLite** database. The bot is the only writer; nothing else touches it directly.
+**Google Sheets is the source of truth for army state.** Each commander has an army sheet (copied from a template at commission time) whose contract with the bot is a set of named ranges: scalar stats like morale and position, plus the detachment and goods tables. The bot writes back only the handful of values it changes mechanically (morale, supplies, coin, position, …); the rest is GM-owned. The **admin sheet** carries the shared tabs the GM edits live: queue, message log, and market demands.
 
-**Google Sheets** handles the human-readable layer:
-
-- One **admin sheet** with multiple tabs: queue, message log, and a global army overview
-- One **army sheet per commander**, copied from a template at commission time, tracking that commander's army stats
-
-The bot reads and writes Sheets via a Google service account. The mapping from Discord user to army sheet (and faction, channel, etc.) is stored in SQLite.
+**SQLite** holds the rest: the hex map, factions, commanders (including the Discord-user-to-sheet mapping), pending orders, and undelivered messages. The bot is the only writer to the database.
 
 ## Configuration
 
