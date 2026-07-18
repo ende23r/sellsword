@@ -74,7 +74,8 @@ export function processMovement(
   database: Database.Database,
   stats: Map<number, ArmySheetStats>,
   log: Log,
-): void {
+): Set<number> {
+  const moved = new Set<number>();
   const orders = database
     .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'move'")
     .all() as OrderRow[];
@@ -108,7 +109,8 @@ export function processMovement(
     const hexesAllowed = Math.floor((hexSpeed * speedMultiplier) / 6);
     if (hexesAllowed === 0) continue;
 
-    advanceArmy(database, army, order, hexesAllowed, validCoords, log);
+    const didMove = advanceArmy(database, army, order, hexesAllowed, validCoords, log);
+    if (didMove) moved.add(army.id);
 
     if (forced) {
       rollMarchMorale(stats, army.id, army.name ?? String(army.id), 'forced', log);
@@ -116,6 +118,7 @@ export function processMovement(
   }
 
   checkArmyCollisions(database, log);
+  return moved;
 }
 
 // ── Forage (night tick) ───────────────────────────────────────────────────────
@@ -325,14 +328,14 @@ function advanceArmy(
   hexesAllowed: number,
   validCoords: Set<string>,
   log: Log,
-): void {
+): boolean {
   const params = JSON.parse(order.parameters) as { dest_q: number; dest_r: number };
   const from = { q: army.hex_q, r: army.hex_r };
   const to = { q: params.dest_q, r: params.dest_r };
 
   if (from.q === to.q && from.r === to.r) {
     markOrderProcessed(database, order.id);
-    return;
+    return false;
   }
 
   const path = findPath(from, to, validCoords);
@@ -341,7 +344,7 @@ function advanceArmy(
       `⚠️ **${army.name ?? army.id}** has no valid path to (${to.q},${to.r}). Order cancelled.`,
     );
     markOrderProcessed(database, order.id);
-    return;
+    return false;
   }
 
   const dest = path[Math.min(hexesAllowed, path.length) - 1];
@@ -354,6 +357,7 @@ function advanceArmy(
   log.push(
     `🚶 **${army.name ?? army.id}** moved to (${dest.q},${dest.r})${reached ? ' — arrived' : ''}.`,
   );
+  return true;
 }
 
 export function rollMarchMorale(

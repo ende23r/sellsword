@@ -124,6 +124,13 @@ export type QueueRow = {
   added_by_id: string;
 };
 
+export type ConferenceChannelRow = {
+  id: number;
+  hex_q: number;
+  hex_r: number;
+  discord_channel_id: string;
+};
+
 // Query helpers
 
 export function getCommanderByDiscordId(discordUserId: string): CommanderRow | undefined {
@@ -169,6 +176,40 @@ export function getPendingOrders(type?: string): OrderRow[] {
 
 export function markOrderProcessed(orderId: number): void {
   db.prepare("UPDATE orders SET processed_at = datetime('now') WHERE id = ?").run(orderId);
+}
+
+export function getArmiesAtHex(q: number, r: number): ArmyRow[] {
+  return db.prepare('SELECT * FROM armies WHERE hex_q = ? AND hex_r = ?').all(q, r) as ArmyRow[];
+}
+
+export function getStrongholdAtHex(q: number, r: number): StrongholdRow | undefined {
+  return db
+    .prepare('SELECT s.* FROM strongholds s JOIN hexes h ON h.id = s.hex_id WHERE h.q = ? AND h.r = ?')
+    .get(q, r) as StrongholdRow | undefined;
+}
+
+export function getCommanderByArmyId(armyId: number): CommanderRow | undefined {
+  return db
+    .prepare('SELECT c.* FROM commanders c JOIN armies a ON a.commander_id = c.id WHERE a.id = ?')
+    .get(armyId) as CommanderRow | undefined;
+}
+
+export function getConferenceChannelForHex(q: number, r: number): ConferenceChannelRow | undefined {
+  return db
+    .prepare('SELECT * FROM conference_channels WHERE hex_q = ? AND hex_r = ?')
+    .get(q, r) as ConferenceChannelRow | undefined;
+}
+
+export function saveConferenceChannel(q: number, r: number, channelId: string): void {
+  db.prepare('INSERT OR REPLACE INTO conference_channels (hex_q, hex_r, discord_channel_id) VALUES (?, ?, ?)').run(q, r, channelId);
+}
+
+export function deleteConferenceChannel(channelId: string): void {
+  db.prepare('DELETE FROM conference_channels WHERE discord_channel_id = ?').run(channelId);
+}
+
+export function getAllConferenceChannels(): ConferenceChannelRow[] {
+  return db.prepare('SELECT * FROM conference_channels').all() as ConferenceChannelRow[];
 }
 
 export default db;

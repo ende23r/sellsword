@@ -85,4 +85,12 @@ export const DB_SCHEMA = `
     added_at         TEXT NOT NULL DEFAULT (datetime('now')),
     added_by_id      TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS conference_channels (
+    id                 INTEGER PRIMARY KEY,
+    hex_q              INTEGER NOT NULL,
+    hex_r              INTEGER NOT NULL,
+    discord_channel_id TEXT NOT NULL UNIQUE,
+    UNIQUE(hex_q, hex_r)
+  );
 `;

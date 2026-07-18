@@ -1,5 +1,5 @@
-import type { TextChannel } from 'discord.js';
-import db, { type CommanderRow } from './db.js';
+import { OverwriteType, PermissionFlagsBits, type TextChannel } from 'discord.js';
+import db, { deleteConferenceChannel, getAllConferenceChannels, getCommanderByArmyId, type CommanderRow } from './db.js';
 import type { ArmySheetStats } from './sheets.js';
 import { extractSheetId, fetchArmyStats, syncArmySheet } from './sheets.js';
 import {
@@ -40,8 +40,9 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
           .all() as { army_id: number }[]
       ).map((r) => r.army_id),
     );
-    processMovement(db, statsMap, log);
+    const movedArmyIds = processMovement(db, statsMap, log);
     processForage(db, statsMap, log, movingArmyIds);
+    await removeMoversFromConferences(movedArmyIds, client);
   }
 
   await deliverMessages(db, client, log);
@@ -96,4 +97,44 @@ async function syncSheets(statsMap: Map<number, ArmySheetStats>, log: string[]):
   }
 
   if (synced > 0) log.push(`📊 Army sheets synced (${synced}).`);
+}
+
+async function removeMoversFromConferences(
+  movedArmyIds: Set<number>,
+  client: TextChannel['client'],
+): Promise<void> {
+  if (movedArmyIds.size === 0) return;
+
+  const conferences = getAllConferenceChannels();
+  if (conferences.length === 0) return;
+
+  for (const armyId of movedArmyIds) {
+    const commander = getCommanderByArmyId(armyId);
+    if (!commander?.discord_user_id) continue;
+
+    for (const conf of conferences) {
+      try {
+        const ch = await client.channels.fetch(conf.discord_channel_id);
+        if (!ch?.isTextBased()) continue;
+        const textCh = ch as TextChannel;
+
+        const overwrite = textCh.permissionOverwrites.cache.get(commander.discord_user_id);
+        if (!overwrite) continue;
+
+        const armyName = (db.prepare('SELECT name FROM armies WHERE id = ?').get(armyId) as { name: string | null } | undefined)?.name ?? `Army ${armyId}`;
+        await textCh.permissionOverwrites.delete(commander.discord_user_id);
+        await textCh.send(`📤 **${armyName}** has marched from the hex.`);
+
+        const remaining = textCh.permissionOverwrites.cache.filter(
+          (ow) => ow.type === OverwriteType.Member && ow.allow.has(PermissionFlagsBits.ViewChannel),
+        );
+        if (remaining.size === 0) {
+          deleteConferenceChannel(conf.discord_channel_id);
+          await textCh.delete();
+        }
+      } catch {
+        // Channel unavailable or already deleted — continue
+      }
+    }
+  }
 }

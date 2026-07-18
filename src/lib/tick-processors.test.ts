@@ -273,7 +273,8 @@ describe('processMovement', () => {
     seedHex(db, 0, 1);
     seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 1, roads_only: false });
 
-    processMovement(db, stats, []);
+    const moved = processMovement(db, stats, []);
+    expect(moved.has(armyId)).toBe(true);
 
     const army = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(armyId) as {
       hex_q: number;
@@ -373,6 +374,22 @@ describe('processMovement', () => {
     };
     expect(order.processed_at).not.toBeNull();
     expect(log.some((l) => l.includes('no valid path'))).toBe(true);
+  });
+
+  it('returns empty set when no armies move', () => {
+    const db2 = makeDb();
+    const moved = processMovement(db2, new Map(), []);
+    expect(moved.size).toBe(0);
+  });
+
+  it('does not include army in moved set when path fails', () => {
+    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[armyId, makeStats()]]);
+    seedHex(db, 0, 0);
+    seedOrder(db, armyId, 'move', { dest_q: 9, dest_r: 9, roads_only: false });
+
+    const moved = processMovement(db, stats, []);
+    expect(moved.has(armyId)).toBe(false);
   });
 });
 
