@@ -2,7 +2,7 @@ import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.j
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { upsertFaction } from '../lib/faction-ops.js';
-import { shareSheetPublic } from '../lib/sheets.js';
+import { shareSheetPublic, syncArmySheet, type ArmySheetStats } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 // TODO: automate sheet creation once a Drive solution that works with
@@ -93,6 +93,15 @@ const commission: Command = {
       const sheetId = match ? match[1] : sheetInput;
       sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}`;
       await shareSheetPublic(sheetId);
+      const defaultStats: ArmySheetStats = {
+        infantry: 0, cavalry: 0, wagons: 0, noncombatants: 0,
+        morale: 9, resting_morale: 9, max_morale: 12,
+        supplies: 0, coin: 0, goods: 0,
+        stance: 'allow',
+        infantry_strength: 0, cavalry_strength: 0, scouting_range: 1,
+        forced_march: false, night_march: false,
+      };
+      await syncArmySheet(sheetId, defaultStats, startQ, startR);
     }
 
     const factionId = upsertFaction(db, factionRole.name, factionRole.id, category.id);

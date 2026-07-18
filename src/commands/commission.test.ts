@@ -7,7 +7,11 @@ vi.mock('../lib/admin-notify.js', () => ({ notifyAdmin: vi.fn() }));
 vi.mock('../lib/faction-ops.js', () => ({ upsertFaction: vi.fn().mockReturnValue(1) }));
 
 const mockShareSheetPublic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-vi.mock('../lib/sheets.js', () => ({ shareSheetPublic: mockShareSheetPublic }));
+const mockSyncArmySheet = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('../lib/sheets.js', () => ({
+  shareSheetPublic: mockShareSheetPublic,
+  syncArmySheet: mockSyncArmySheet,
+}));
 
 const mockArmyGet = vi.hoisted(() => vi.fn().mockReturnValue(null));
 const mockCommanderGet = vi.hoisted(() => vi.fn().mockReturnValue({ id: 1 }));
@@ -104,6 +108,28 @@ describe('/commission', () => {
     const { default: command } = await import('./commission.js');
     await command.execute(makeInteraction() as any);
     expect(mockShareSheetPublic).not.toHaveBeenCalled();
+  });
+
+  it('syncs default stats and starting position to the sheet when commissioned', async () => {
+    const { default: command } = await import('./commission.js');
+    const interaction = makeInteraction();
+    (interaction.options.getString as any).mockImplementation((key: string) => {
+      if (key === 'army_name') return 'Blue 1st';
+      if (key === 'sheet_id') return 'https://docs.google.com/spreadsheets/d/abc123/edit';
+      return null;
+    });
+    (interaction.options.getInteger as any).mockImplementation((key: string) => {
+      if (key === 'start_q') return 4;
+      if (key === 'start_r') return -2;
+      return 0;
+    });
+    await command.execute(interaction as any);
+    expect(mockSyncArmySheet).toHaveBeenCalledWith(
+      'abc123',
+      expect.objectContaining({ morale: 9, resting_morale: 9, stance: 'allow', scouting_range: 1 }),
+      4,
+      -2,
+    );
   });
 
   it('rejects if no faction category exists', async () => {
