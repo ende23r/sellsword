@@ -73,7 +73,7 @@ Key lib files:
 - `src/lib/faction-ops.ts` — `upsertFaction()` for writing to the factions table (injectable DB, used by seed script and commands)
 - `src/lib/faction-sync.ts` — `syncFactions()` creates missing Discord roles/categories and upserts factions into the DB; used by `npm run seed-factions`
 
-Discord commands (in `src/commands/`): `/queue`, `/unqueue`, `/recruit`, `/commission`, `/retire`, `/move`, `/forage`, `/pace`, `/stance`, `/transfer`, `/message`, `/gmping`, `/map`, `/list-armies`, `/drop-army`, `/drop-message`, `/ticknow` (admin), `/teleport` (admin), `/battle` (admin)
+Discord commands (in `src/commands/`): `/queue`, `/unqueue`, `/recruit`, `/commission`, `/retire`, `/move`, `/forage`, `/pace`, `/stance`, `/transfer`, `/message`, `/gmping`, `/map`, `/list-armies`, `/drop-army`, `/drop-message`, `/roll`, `/ticknow` (admin), `/teleport` (admin), `/battle` (admin)
 
 ## Game Domain (for implementing bot logic)
 
