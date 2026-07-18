@@ -1,6 +1,7 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
 import { extractSheetId, fetchArmyStats, syncArmySheet } from '../lib/sheets.js';
+import { notifyAdmin } from '../lib/admin-notify.js';
 import type { Command } from '../types.js';
 
 type Resource = 'supplies' | 'coin' | 'goods';
@@ -90,10 +91,40 @@ const transfer: Command = {
     senderStats[resource] -= amount;
     recipientStats[resource] += amount;
 
-    await Promise.all([
-      syncArmySheet(senderSheetId, senderStats),
-      syncArmySheet(recipientSheetId, recipientStats),
-    ]);
+    // Write sequentially, deducting first, so a sheet failure can never create resources.
+    try {
+      await syncArmySheet(senderSheetId, senderStats);
+    } catch {
+      await interaction.editReply(
+        '⚠️ Transfer failed — could not update your army sheet. Nothing was transferred.',
+      );
+      return;
+    }
+
+    try {
+      await syncArmySheet(recipientSheetId, recipientStats);
+    } catch {
+      senderStats[resource] += amount;
+      let restored = true;
+      try {
+        await syncArmySheet(senderSheetId, senderStats);
+      } catch {
+        restored = false;
+      }
+      await notifyAdmin(
+        interaction.client,
+        `⚠️ /transfer failed midway: **${amount.toLocaleString()} ${resource}** was deducted from **${interaction.user.username}** but not credited to **${recipientUser.username}**. ` +
+          (restored
+            ? 'Sender sheet was restored.'
+            : 'Sender sheet could NOT be restored — fix both sheets manually.'),
+      );
+      await interaction.editReply(
+        restored
+          ? "⚠️ Transfer failed — the recipient's sheet could not be updated. Your resources were restored."
+          : '⚠️ Transfer failed midway and your sheet could not be restored. The GM has been notified.',
+      );
+      return;
+    }
 
     await interaction.editReply(
       `✅ Transferred **${amount.toLocaleString()} ${resource}** to ${recipientUser}.`,
