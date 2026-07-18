@@ -4,6 +4,7 @@ import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { resolveBattle, type BattleOutcome } from '../lib/battle.js';
 import { extractSheetId, fetchArmyStats, syncArmySheet, type ArmySheetStats } from '../lib/sheets.js';
+import { formatHex } from '../lib/hex.js';
 import type { Command } from '../types.js';
 
 function sign(n: number): string {
@@ -21,7 +22,7 @@ function formatAdminMessage(outcome: BattleOutcome): string {
   const loser = winner === 'a' ? sideB : winner === 'b' ? sideA : null;
 
   const lines: string[] = [
-    `⚔️ **BATTLE** at (${hexQ},${hexR < 0 ? '−' + Math.abs(hexR) : hexR}) — **${sideA.name}** vs **${sideB.name}**`,
+    `⚔️ **BATTLE** at ${formatHex(hexQ, hexR)} — **${sideA.name}** vs **${sideB.name}**`,
     `${formatSide(sideA)}  |  ${formatSide(sideB)}  |  Diff: ${diff}`,
   ];
 
@@ -137,7 +138,7 @@ const battle: Command = {
         const isVictor = outcome.winner === 'a' ? side === outcome.sideA : outcome.winner === 'b' ? side === outcome.sideB : false;
         const isDraw = outcome.winner === 'draw';
         const enemy = side === outcome.sideA ? outcome.sideB : outcome.sideA;
-        const hexCoord = `(${outcome.hexQ},${outcome.hexR < 0 ? '−' + Math.abs(outcome.hexR) : outcome.hexR})`;
+        const hexCoord = formatHex(outcome.hexQ, outcome.hexR);
 
         let msg: string;
         if (isDraw) {

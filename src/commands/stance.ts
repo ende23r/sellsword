@@ -1,6 +1,6 @@
-import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
-import { extractSheetId, writeStance } from '../lib/sheets.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { requirePlayerArmy } from '../lib/command-helpers.js';
+import { writeStance } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const stance: Command = {
@@ -19,18 +19,9 @@ const stance: Command = {
     ),
 
   async execute(interaction) {
-    const army = getArmyByDiscordId(interaction.user.id);
-    if (!army) {
-      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    const commander = getCommanderByDiscordId(interaction.user.id);
-    const sheetId = extractSheetId(commander?.army_sheet_url);
-    if (!sheetId) {
-      await interaction.reply({ content: 'Your army has no sheet configured.', flags: MessageFlags.Ephemeral });
-      return;
-    }
+    const player = await requirePlayerArmy(interaction);
+    if (!player) return;
+    const { sheetId } = player;
 
     const posture = interaction.options.getString('posture', true) as 'allow_passage' | 'engage';
     await writeStance(sheetId, posture);

@@ -9,6 +9,7 @@ import db, {
 } from '../lib/db.js';
 import { extractSheetId, fetchArmyStats } from '../lib/sheets.js';
 import { conferenceChannelName } from '../lib/conference-ops.js';
+import { formatHex } from '../lib/hex.js';
 import type { Command } from '../types.js';
 
 const conference: Command = {
@@ -123,7 +124,7 @@ const conference: Command = {
       }
     }
 
-    const hexCoord = `(${q},${r < 0 ? '−' + Math.abs(r) : r})`;
+    const hexCoord = formatHex(q, r);
     const names = armiesAtHex.map((a) => a.name ?? `Army ${a.id}`).join(', ');
     await channel.send(`📋 **Conference convened** at ${hexCoord} — Present: ${names}`);
 

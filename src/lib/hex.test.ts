@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { computeDeliveryTick, lastTickBefore, nextTickAfter } from './hex.js';
+import { computeDeliveryTick, formatHex, lastTickBefore, nextTickAfter } from './hex.js';
 
 // All tests use 'UTC' so tick times are exactly 06:00Z, 14:00Z, 22:00Z — no DST noise.
 
 const D = (s: string) => new Date(s);
+
+describe('formatHex', () => {
+  it('formats positive coordinates', () => {
+    expect(formatHex(3, 5)).toBe('(3,5)');
+  });
+
+  it('uses a typographic minus for negative r', () => {
+    expect(formatHex(3, -5)).toBe('(3,−5)');
+  });
+});
 
 describe('lastTickBefore', () => {
   it('returns the 06:00 tick when now is just after it', () => {

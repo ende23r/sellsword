@@ -1,7 +1,8 @@
-import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId, getCommanderByDiscordId, getHex, type HexRow } from '../lib/db.js';
+import { SlashCommandBuilder } from 'discord.js';
+import db, { getHex, type HexRow } from '../lib/db.js';
+import { requirePlayerArmy } from '../lib/command-helpers.js';
 import { hexesInRange } from '../lib/hex.js';
-import { extractSheetId, fetchArmyStats } from '../lib/sheets.js';
+import { fetchArmyStats } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const forage: Command = {
@@ -10,18 +11,9 @@ const forage: Command = {
     .setDescription('Order your army to collect supplies from the area at the next night update.'),
 
   async execute(interaction) {
-    const army = getArmyByDiscordId(interaction.user.id);
-    if (!army) {
-      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    const commander = getCommanderByDiscordId(interaction.user.id);
-    const sheetId = extractSheetId(commander?.army_sheet_url);
-    if (!sheetId) {
-      await interaction.reply({ content: 'Your army has no sheet configured.', flags: MessageFlags.Ephemeral });
-      return;
-    }
+    const player = await requirePlayerArmy(interaction);
+    if (!player) return;
+    const { army, sheetId } = player;
 
     await interaction.deferReply();
 

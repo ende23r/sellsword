@@ -27,6 +27,12 @@ export function hexDistance(a: HexCoord, b: HexCoord): number {
   return (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2;
 }
 
+// Display form "(q,r)"; negative r uses a typographic minus so Discord
+// doesn't mistake ",-N" for markdown or channel-name punctuation.
+export function formatHex(q: number, r: number): string {
+  return `(${q},${r < 0 ? '−' + Math.abs(r) : r})`;
+}
+
 export function hexNeighbors(h: HexCoord): HexCoord[] {
   return Object.values(HEX_DIRECTIONS).map((d) => ({ q: h.q + d.q, r: h.r + d.r }));
 }

@@ -1,6 +1,8 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId, getCommanderByDiscordId, getHex } from '../lib/db.js';
-import { extractSheetId, fetchArmyStats } from '../lib/sheets.js';
+import db, { getHex } from '../lib/db.js';
+import { requirePlayerArmy } from '../lib/command-helpers.js';
+import { hexDistance } from '../lib/hex.js';
+import { fetchArmyStats } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const move: Command = {
@@ -21,11 +23,9 @@ const move: Command = {
     ),
 
   async execute(interaction) {
-    const army = getArmyByDiscordId(interaction.user.id);
-    if (!army) {
-      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
-      return;
-    }
+    const player = await requirePlayerArmy(interaction);
+    if (!player) return;
+    const { army, sheetId } = player;
 
     const destQ = interaction.options.getInteger('q', true);
     const destR = interaction.options.getInteger('r', true);
@@ -43,16 +43,6 @@ const move: Command = {
     if (destHex.speed === 0) {
       await interaction.reply({
         content: `Hex (${destQ},${destR}) is impassable terrain (${destHex.terrain}).`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const commander = getCommanderByDiscordId(interaction.user.id);
-    const sheetId = extractSheetId(commander?.army_sheet_url);
-    if (!sheetId) {
-      await interaction.reply({
-        content: 'Your army has no sheet configured.',
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -88,12 +78,7 @@ const move: Command = {
       JSON.stringify({ dest_q: destQ, dest_r: destR, roads_only: roadsOnly }),
     );
 
-    const dist = Math.round(
-      (Math.abs(armyStats.hex_q - destQ) +
-        Math.abs(armyStats.hex_q + armyStats.hex_r - destQ - destR) +
-        Math.abs(armyStats.hex_r - destR)) /
-        2,
-    );
+    const dist = hexDistance({ q: armyStats.hex_q, r: armyStats.hex_r }, { q: destQ, r: destR });
     await interaction.editReply(
       `✅ Move order queued: **(${armyStats.hex_q},${armyStats.hex_r}) → (${destQ},${destR})** (${dist} hex${dist !== 1 ? 'es' : ''} away) — army will advance each night tick until it arrives.\nTerrain: **${destHex.terrain}**${roadsOnly ? ' · roads only' : ''}`,
     );

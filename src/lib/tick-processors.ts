@@ -45,14 +45,7 @@ export function processNightMarchMovement(
     .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'move'")
     .all() as OrderRow[];
   const validCoords = buildValidCoords(database);
-
-  const factions = new Map<number, number | null>(
-    (
-      database
-        .prepare('SELECT a.id, c.faction_id FROM armies a JOIN commanders c ON c.id = a.commander_id')
-        .all() as { id: number; faction_id: number | null }[]
-    ).map((r) => [r.id, r.faction_id]),
-  );
+  const factions = buildFactionMap(database);
 
   for (const order of orders) {
     const army = database
@@ -89,15 +82,8 @@ export function processMovement(
     .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'move'")
     .all() as OrderRow[];
   const validCoords = buildValidCoords(database);
-
   // Faction map for engage interception checks
-  const factions = new Map<number, number | null>(
-    (
-      database
-        .prepare('SELECT a.id, c.faction_id FROM armies a JOIN commanders c ON c.id = a.commander_id')
-        .all() as { id: number; faction_id: number | null }[]
-    ).map((r) => [r.id, r.faction_id]),
-  );
+  const factions = buildFactionMap(database);
 
   for (const order of orders) {
     const army = database
@@ -340,6 +326,16 @@ export async function postSupplyUpdates(
 function buildValidCoords(database: Database.Database): Set<string> {
   const hexes = database.prepare('SELECT q, r FROM hexes WHERE speed > 0').all() as { q: number; r: number }[];
   return new Set(hexes.map((h) => `${h.q},${h.r}`));
+}
+
+function buildFactionMap(database: Database.Database): Map<number, number | null> {
+  return new Map(
+    (
+      database
+        .prepare('SELECT a.id, c.faction_id FROM armies a JOIN commanders c ON c.id = a.commander_id')
+        .all() as { id: number; faction_id: number | null }[]
+    ).map((r) => [r.id, r.faction_id]),
+  );
 }
 
 type MoveOrderParams = { dest_q: number; dest_r: number; roads_only: boolean };

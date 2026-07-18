@@ -1,5 +1,6 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
+import { requirePlayerArmy } from '../lib/command-helpers.js';
 import { extractSheetId, fetchArmyStats, syncArmySheet } from '../lib/sheets.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import type { Command } from '../types.js';
@@ -29,11 +30,9 @@ const transfer: Command = {
     ),
 
   async execute(interaction) {
-    const sender = getArmyByDiscordId(interaction.user.id);
-    if (!sender) {
-      await interaction.reply({ content: 'You have no army.', flags: MessageFlags.Ephemeral });
-      return;
-    }
+    const player = await requirePlayerArmy(interaction);
+    if (!player) return;
+    const senderSheetId = player.sheetId;
 
     const recipientUser = interaction.options.getUser('recipient', true);
     if (recipientUser.id === interaction.user.id) {
@@ -50,15 +49,8 @@ const transfer: Command = {
       return;
     }
 
-    const senderCommander = getCommanderByDiscordId(interaction.user.id);
     const recipientCommander = getCommanderByDiscordId(recipientUser.id);
-    const senderSheetId = extractSheetId(senderCommander?.army_sheet_url);
     const recipientSheetId = extractSheetId(recipientCommander?.army_sheet_url);
-
-    if (!senderSheetId) {
-      await interaction.reply({ content: 'Your army has no sheet configured.', flags: MessageFlags.Ephemeral });
-      return;
-    }
     if (!recipientSheetId) {
       await interaction.reply({ content: "Recipient's army has no sheet configured.", flags: MessageFlags.Ephemeral });
       return;
