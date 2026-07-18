@@ -7,6 +7,7 @@ import {
   missingStatRanges,
   statWriteData,
   supplyUpkeep,
+  totalGoods,
   totalStrength,
   totalWagons,
 } from './lib/sheets.js';
@@ -47,7 +48,7 @@ try {
 
 console.log('Stats as the bot reads them:');
 for (const [key, value] of Object.entries(stats)) {
-  if (key === 'infantry_detachments' || key === 'cavalry_detachments') continue;
+  if (key === 'infantry_detachments' || key === 'cavalry_detachments' || key === 'goods') continue;
   console.log(`  ${key.padEnd(18)} ${value}`);
 }
 
@@ -62,11 +63,17 @@ for (const [label, detachments] of [
     );
   }
 }
+console.log(`\nGoods (${stats.goods.length}):`);
+for (const g of stats.goods) {
+  console.log(`  ${(g.name || '(unnamed)').padEnd(24)} ${g.count}`);
+}
+
 console.log('Derived totals:');
 console.log(`  supply upkeep/day  ${supplyUpkeep(stats) + stats.noncombatants + totalWagons(stats) * 10}`);
 console.log(`  strength           ${totalStrength(stats)}`);
 console.log(`  wagons             ${totalWagons(stats)}`);
 console.log(`  cavalry-only       ${isCavalryOnly(stats)}`);
+console.log(`  goods              ${totalGoods(stats)}`);
 
 console.log('\nValues the bot would write back on the next sync:');
 for (const { range, values } of statWriteData(stats)) {

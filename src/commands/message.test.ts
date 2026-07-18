@@ -69,7 +69,7 @@ describe('/message', () => {
       Promise.resolve({
         infantry_detachments: [], cavalry_detachments: [], noncombatants: 0,
         morale: 9, resting_morale: 9, max_morale: 12,
-        supplies: 0, coin: 0, goods: 0,
+        supplies: 0, coin: 0, goods: [],
         stance: 'allow_passage' as const,
         scouting_range: 1,
         forced_march: false, night_march: false,

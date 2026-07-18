@@ -20,7 +20,7 @@ vi.mock('../lib/admin-notify.js', () => ({
 }));
 
 function makeStats(overrides: object = {}) {
-  return { supplies: 1000, coin: 0, goods: 0, hex_q: 0, hex_r: 0, ...overrides };
+  return { supplies: 1000, coin: 0, goods: [], hex_q: 0, hex_r: 0, ...overrides };
 }
 
 function makeInteraction({ resource = 'supplies', amount = 100 } = {}) {

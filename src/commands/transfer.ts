@@ -5,12 +5,14 @@ import { extractSheetId, fetchArmyStats, syncArmySheet } from '../lib/sheets.js'
 import { notifyAdmin } from '../lib/admin-notify.js';
 import type { Command } from '../types.js';
 
-type Resource = 'supplies' | 'coin' | 'goods';
+// Goods are a GM-owned table on the sheet (named kinds, not a fungible count),
+// so they move via sheet edits rather than this command.
+type Resource = 'supplies' | 'coin';
 
 const transfer: Command = {
   data: new SlashCommandBuilder()
     .setName('transfer')
-    .setDescription('Send supplies, goods, or coin to an army in the same hex.')
+    .setDescription('Send supplies or coin to an army in the same hex.')
     .addUserOption((o) =>
       o.setName('recipient').setDescription('The commander to transfer to').setRequired(true),
     )
@@ -22,7 +24,6 @@ const transfer: Command = {
         .addChoices(
           { name: 'Supplies', value: 'supplies' },
           { name: 'Coin', value: 'coin' },
-          { name: 'Goods', value: 'goods' },
         ),
     )
     .addIntegerOption((o) =>

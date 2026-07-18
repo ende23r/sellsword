@@ -45,7 +45,7 @@ const mockStats = {
   infantry_detachments: [{ name: 'Foot', size: 1000, notes: '', multiplier: 1, strength: 0, wagons: 0 }],
   cavalry_detachments: [],
   noncombatants: 0, scouting_range: 1, morale: 9, resting_morale: 9,
-  max_morale: 12, supplies: 10000, coin: 0, goods: 0,
+  max_morale: 12, supplies: 10000, coin: 0, goods: [],
   hex_q: 4, hex_r: -2,
   stance: 'allow_passage' as const,
   forced_march: false, night_march: false,

@@ -30,6 +30,13 @@ export type Detachment = {
   wagons: number;
 };
 
+// One row of the sheet's goods table: a named kind of good and how much of
+// it the army carries, measured on the same scale as supplies.
+export type Good = {
+  name: string;
+  count: number;
+};
+
 export type ArmySheetStats = {
   // Composition (GM-owned; the bot reads and derives totals, never writes).
   // Infantry and cavalry are separate tables because the rules treat them
@@ -37,12 +44,12 @@ export type ArmySheetStats = {
   infantry_detachments: Detachment[];
   cavalry_detachments: Detachment[];
   noncombatants: number;
-  // Resources
+  // Resources (goods is a GM-owned table like the detachments)
   morale: number;
   resting_morale: number;
   supplies: number;
   coin: number;
-  goods: number;
+  goods: Good[];
   // Position (source of truth; written to hex cell as "q,r")
   hex_q: number;
   hex_r: number;
@@ -84,12 +91,17 @@ export function isCavalryOnly(stats: Composition): boolean {
   );
 }
 
+export function totalGoods(stats: Pick<ArmySheetStats, 'goods'>): number {
+  return stats.goods.reduce((sum, g) => sum + g.count, 0);
+}
+
 // Every army sheet must define these named ranges (Data → Named ranges in the
-// Sheets UI). Each scalar range covers the single cell that holds that stat;
-// `infantry_detachments` and `cavalry_detachments` each cover a detachment
-// table's data rows (columns name | size | notes | multiplier | strength |
-// wagons, header row excluded — draw them generously downward, blank rows are
-// ignored). GMs are free to lay the sheet out however they like — named
+// Sheets UI). Each scalar range covers the single cell that holds that stat.
+// The table ranges — `infantry_detachments`, `cavalry_detachments`
+// (columns name | size | notes | multiplier | strength | wagons) and `goods`
+// (columns name | count) — cover their table's data rows, header excluded;
+// draw them generously downward, since only rows with a positive size/count
+// register. GMs are free to lay the sheet out however they like — named
 // ranges follow their cell when rows or columns move, so this is the whole
 // contract between the bot and the sheet.
 export const SCALAR_RANGE_NAMES = [
@@ -98,7 +110,6 @@ export const SCALAR_RANGE_NAMES = [
   'resting_morale',
   'supplies',
   'coin',
-  'goods',
   'hex',
   'stance',
   'scouting_range',
@@ -111,6 +122,7 @@ export const STAT_RANGE_NAMES = [
   ...SCALAR_RANGE_NAMES,
   'infantry_detachments',
   'cavalry_detachments',
+  'goods',
 ] as const;
 
 export type ScalarRangeName = (typeof SCALAR_RANGE_NAMES)[number];
@@ -170,10 +182,37 @@ export function parseDetachments(
   return detachments;
 }
 
+// Goods rows follow the same gating as detachments: a positive count marks a
+// real row, 0 explicitly disables one, and a named row with a blank count is
+// an error.
+export function parseGoods(rows: RawCell[][]): Good[] {
+  const goods: Good[] = [];
+
+  rows.forEach((row, i) => {
+    const [name, count] = [row[0], row[1]];
+    const label = `Goods row ${i + 1} ("${String(name ?? '').trim() || 'unnamed'}")`;
+
+    if (blank(count)) {
+      if (!blank(name)) throw new Error(`${label}: count is required.`);
+      return;
+    }
+    const countNum = Number(count);
+    if (isNaN(countNum) || countNum < 0) {
+      throw new Error(`${label}: count "${String(count).trim()}" is not a valid number.`);
+    }
+    if (countNum === 0) return;
+
+    goods.push({ name: String(name ?? '').trim(), count: Math.round(countNum) });
+  });
+
+  return goods;
+}
+
 export function parseSheetStats(
   cells: StatCells,
   infantryRows: RawCell[][],
   cavalryRows: RawCell[][],
+  goodsRows: RawCell[][],
 ): ArmySheetStats {
   const num = (v: RawCell, fallback: number): number => {
     const n = Number(v);
@@ -211,7 +250,7 @@ export function parseSheetStats(
     resting_morale: num(cells.resting_morale, 9),
     supplies: num(cells.supplies, 0),
     coin: num(cells.coin, 0),
-    goods: num(cells.goods, 0),
+    goods: parseGoods(goodsRows),
     hex_q: hex.q,
     hex_r: hex.r,
     stance: stance(cells.stance),
@@ -378,15 +417,17 @@ export async function fetchArmyStats(sheetId: string): Promise<ArmySheetStats> {
   SCALAR_RANGE_NAMES.forEach((name, i) => {
     cells[name] = (valueRanges[i]?.values?.[0]?.[0] ?? null) as string | number | null;
   });
-  // The detachment tables are requested last, after the scalars.
+  // The table ranges are requested last, after the scalars.
   const infantryRows = (valueRanges[SCALAR_RANGE_NAMES.length]?.values ?? []) as RawCell[][];
   const cavalryRows = (valueRanges[SCALAR_RANGE_NAMES.length + 1]?.values ?? []) as RawCell[][];
-  return parseSheetStats(cells, infantryRows, cavalryRows);
+  const goodsRows = (valueRanges[SCALAR_RANGE_NAMES.length + 2]?.values ?? []) as RawCell[][];
+  return parseSheetStats(cells, infantryRows, cavalryRows, goodsRows);
 }
 
-// The ranges the bot owns and writes back. Everything else — detachments,
-// noncombatants, resting_morale, max_morale, scouting_range — is GM-owned:
-// the bot reads it but never writes, so GM edits are never clobbered.
+// The ranges the bot owns and writes back. Everything else — the detachment
+// and goods tables, noncombatants, resting_morale, max_morale, scouting_range
+// — is GM-owned: the bot reads it but never writes, so GM edits are never
+// clobbered.
 export function statWriteData(
   stats: ArmySheetStats,
 ): { range: StatRangeName; values: (string | number)[][] }[] {
@@ -394,7 +435,6 @@ export function statWriteData(
     { range: 'morale', values: [[stats.morale]] },
     { range: 'supplies', values: [[stats.supplies]] },
     { range: 'coin', values: [[stats.coin]] },
-    { range: 'goods', values: [[stats.goods]] },
     { range: 'hex', values: [[`${stats.hex_q},${stats.hex_r}`]] },
     { range: 'stance', values: [[stats.stance]] },
     { range: 'forced_march', values: [[stats.forced_march ? 1 : 0]] },
