@@ -427,8 +427,8 @@ export function rollMarchMorale(
   type: 'forced' | 'night',
   log: Log,
 ): void {
-  const d1 = Math.ceil(Math.random() * 6);
-  const d2 = Math.ceil(Math.random() * 6);
+  const d1 = Math.floor(Math.random() * 6) + 1;
+  const d2 = Math.floor(Math.random() * 6) + 1;
   if (d1 === d2) {
     const s = stats.get(armyId);
     if (s) s.morale = Math.max(1, s.morale - 1);

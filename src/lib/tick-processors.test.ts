@@ -866,6 +866,17 @@ describe('rollMarchMorale', () => {
 
     expect(stats.get(1)!.morale).toBe(1);
   });
+
+  it('rolls faces 1-6 — never 0 — when the RNG bottoms out', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const stats = new Map([[1, makeStats({ morale: 9 })]]);
+    const log: string[] = [];
+
+    rollMarchMorale(stats, 1, 'Legion', 'night', log);
+
+    expect(stats.get(1)!.morale).toBe(8); // 1,1 is doubles
+    expect(log[0]).toContain('rolled 1,1');
+  });
 });
 
 // ── malformed order parameters ────────────────────────────────────────────────
