@@ -202,6 +202,19 @@ describe('parseDetachments', () => {
     expect(parseDetachments(rows, 'Infantry', 1)).toHaveLength(2);
   });
 
+  it('skips unnamed rows that only carry template defaults (no size)', () => {
+    // Template rows keep a default multiplier and a strength formula even when unused.
+    const rows = [INFANTRY_ROWS[0], ['', '', '', 1, 0, 0], [null, null, null, '1', '0', '']];
+    expect(parseDetachments(rows, 'Infantry', 1)).toHaveLength(1);
+  });
+
+  it('skips rows whose size is 0', () => {
+    const rows = [['Old Guard', 0, 'destroyed at Aegyssus', 1, 500, 2], INFANTRY_ROWS[0]];
+    expect(parseDetachments(rows, 'Infantry', 1)).toEqual([
+      { name: '1st Chiliarchy', size: 1000, notes: 'levy spears', multiplier: 1, strength: 900, wagons: 3 },
+    ]);
+  });
+
   it('defaults multiplier to the table default and strength and wagons to 0 when empty', () => {
     const [inf] = parseDetachments([['Levies', 500, '', '', '', '']], 'Infantry', 1);
     expect(inf).toEqual({ name: 'Levies', size: 500, notes: '', multiplier: 1, strength: 0, wagons: 0 });

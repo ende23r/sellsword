@@ -134,14 +134,24 @@ export function parseDetachments(
 
   rows.forEach((row, i) => {
     const [name, size, notes, multiplier, strength, wagons] = [0, 1, 2, 3, 4, 5].map((c) => row[c]);
-    if ([name, size, notes, multiplier, strength, wagons].every(blank)) return;
-
     const label = `${tableLabel} detachment row ${i + 1} ("${String(name ?? '').trim() || 'unnamed'}")`;
-    const numCol = (v: RawCell, col: string, fallback: number | null): number => {
-      if (blank(v)) {
-        if (fallback === null) throw new Error(`${label}: ${col} is required.`);
-        return fallback;
-      }
+
+    // Template rows may keep a default multiplier and a strength formula even
+    // when unused, so a positive size is what marks a real detachment. A named
+    // row with a blank size is still an error (almost certainly a mistake);
+    // size 0 explicitly disables a row.
+    if (blank(size)) {
+      if (!blank(name)) throw new Error(`${label}: size is required.`);
+      return;
+    }
+    const sizeNum = Number(size);
+    if (isNaN(sizeNum) || sizeNum < 0) {
+      throw new Error(`${label}: size "${String(size).trim()}" is not a valid number.`);
+    }
+    if (sizeNum === 0) return;
+
+    const numCol = (v: RawCell, col: string, fallback: number): number => {
+      if (blank(v)) return fallback;
       const n = Number(v);
       if (isNaN(n) || n < 0) throw new Error(`${label}: ${col} "${String(v).trim()}" is not a valid number.`);
       return n;
@@ -149,7 +159,7 @@ export function parseDetachments(
 
     detachments.push({
       name: String(name ?? '').trim(),
-      size: Math.round(numCol(size, 'size', null)),
+      size: Math.round(sizeNum),
       notes: String(notes ?? '').trim(),
       multiplier: numCol(multiplier, 'multiplier', defaultMultiplier),
       strength: Math.round(numCol(strength, 'strength', 0)),
