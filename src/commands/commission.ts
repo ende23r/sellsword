@@ -2,6 +2,7 @@ import { ChannelType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.j
 import db from '../lib/db.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
 import { upsertFaction } from '../lib/faction-ops.js';
+import { shareSheetPublic } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 // TODO: automate sheet creation once a Drive solution that works with
@@ -91,6 +92,7 @@ const commission: Command = {
       const match = sheetInput.match(/\/d\/([^/]+)/);
       const sheetId = match ? match[1] : sheetInput;
       sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}`;
+      await shareSheetPublic(sheetId);
     }
 
     const factionId = upsertFaction(db, factionRole.name, factionRole.id, category.id);

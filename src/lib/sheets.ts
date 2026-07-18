@@ -145,6 +145,17 @@ function getAuth(): InstanceType<typeof google.auth.GoogleAuth> {
   return _auth;
 }
 
+// ── Drive helpers ─────────────────────────────────────────────────────────
+
+export async function shareSheetPublic(sheetId: string): Promise<void> {
+  const drive = google.drive({ version: 'v3', auth: getAuth() });
+  await drive.permissions.create({
+    fileId: sheetId,
+    requestBody: { type: 'anyone', role: 'reader' },
+    fields: 'id',
+  });
+}
+
 // ── Admin sheet helpers ────────────────────────────────────────────────────
 
 export async function appendToAdminSheet(tab: string, row: (string | number)[]): Promise<void> {

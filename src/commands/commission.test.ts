@@ -6,6 +6,9 @@ import { upsertFaction } from '../lib/faction-ops.js';
 vi.mock('../lib/admin-notify.js', () => ({ notifyAdmin: vi.fn() }));
 vi.mock('../lib/faction-ops.js', () => ({ upsertFaction: vi.fn().mockReturnValue(1) }));
 
+const mockShareSheetPublic = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('../lib/sheets.js', () => ({ shareSheetPublic: mockShareSheetPublic }));
+
 const mockArmyGet = vi.hoisted(() => vi.fn().mockReturnValue(null));
 const mockCommanderGet = vi.hoisted(() => vi.fn().mockReturnValue({ id: 1 }));
 const mockRun = vi.hoisted(() => vi.fn());
@@ -36,9 +39,11 @@ function makeInteraction() {
     options: {
       getUser: vi.fn().mockReturnValue({ id: 'user-1', username: 'alice' }),
       getRole: vi.fn().mockReturnValue({ id: 'role-1', name: 'Blue' }),
-      getString: vi.fn().mockImplementation((key: string) =>
-        key === 'army_name' ? 'Blue 1st' : null,
-      ),
+      getString: vi.fn().mockImplementation((key: string) => {
+        if (key === 'army_name') return 'Blue 1st';
+        if (key === 'sheet_id') return null;
+        return null;
+      }),
       getInteger: vi.fn().mockReturnValue(0),
     },
     guild: {
@@ -81,6 +86,24 @@ describe('/commission', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.stringContaining('✅'),
     );
+  });
+
+  it('shares the sheet publicly when a sheet ID is provided', async () => {
+    const { default: command } = await import('./commission.js');
+    const interaction = makeInteraction();
+    (interaction.options.getString as any).mockImplementation((key: string) => {
+      if (key === 'army_name') return 'Blue 1st';
+      if (key === 'sheet_id') return 'https://docs.google.com/spreadsheets/d/abc123/edit';
+      return null;
+    });
+    await command.execute(interaction as any);
+    expect(mockShareSheetPublic).toHaveBeenCalledWith('abc123');
+  });
+
+  it('does not call shareSheetPublic when no sheet is provided', async () => {
+    const { default: command } = await import('./commission.js');
+    await command.execute(makeInteraction() as any);
+    expect(mockShareSheetPublic).not.toHaveBeenCalled();
   });
 
   it('rejects if no faction category exists', async () => {
