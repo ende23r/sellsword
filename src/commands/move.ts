@@ -53,7 +53,7 @@ const move: Command = {
 
     if (destQ === armyStats.hex_q && destR === armyStats.hex_r) {
       db.prepare(
-        "DELETE FROM orders WHERE army_id = ? AND type IN ('move', 'forage') AND processed_at IS NULL",
+        "DELETE FROM orders WHERE army_id = ? AND type IN ('move', 'forage', 'sell') AND processed_at IS NULL",
       ).run(army.id);
       await interaction.editReply(
         `🛑 That's your current position. Movement orders cancelled — army will hold at **(${armyStats.hex_q},${armyStats.hex_r})**.`,
@@ -70,7 +70,7 @@ const move: Command = {
 
     // One live order at a time: cancel any existing move or forage order
     db.prepare(
-      "DELETE FROM orders WHERE army_id = ? AND type IN ('move', 'forage') AND processed_at IS NULL",
+      "DELETE FROM orders WHERE army_id = ? AND type IN ('move', 'forage', 'sell') AND processed_at IS NULL",
     ).run(army.id);
 
     db.prepare("INSERT INTO orders (army_id, type, parameters) VALUES (?, 'move', ?)").run(

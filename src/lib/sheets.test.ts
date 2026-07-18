@@ -3,6 +3,7 @@ import {
   STAT_RANGE_NAMES,
   isCavalryOnly,
   missingStatRanges,
+  parseDemands,
   parseDetachments,
   parseGoods,
   parseSheetStats,
@@ -293,6 +294,49 @@ describe('parseGoods', () => {
 
   it('rejects negative counts', () => {
     expect(() => parseGoods([['void', -5]])).toThrow(/Goods row 1/);
+  });
+});
+
+// ── parseDemands ──────────────────────────────────────────────────────────────
+
+describe('parseDemands', () => {
+  it('parses rows in column order hex | good | price | volume', () => {
+    const { demands, warnings } = parseDemands([
+      ['3,-2', 'silk', 2, 500],
+      ['0,0', 'salt', '0.5', '1000'],
+    ]);
+    expect(warnings).toEqual([]);
+    expect(demands).toEqual([
+      { hex_q: 3, hex_r: -2, good: 'silk', price: 2, volume: 500 },
+      { hex_q: 0, hex_r: 0, good: 'salt', price: 0.5, volume: 1000 },
+    ]);
+  });
+
+  it('skips blank rows silently', () => {
+    const { demands, warnings } = parseDemands([['', '', '', ''], [null], ['3,-2', 'silk', 2, 500]]);
+    expect(demands).toHaveLength(1);
+    expect(warnings).toEqual([]);
+  });
+
+  it('warns and skips rows with a malformed hex, price, or volume', () => {
+    const { demands, warnings } = parseDemands([
+      ['12.4', 'silk', 2, 500],
+      ['0,0', 'salt', 'cheap', 100],
+      ['0,0', 'furs', 3, 'many'],
+      ['0,0', '', 3, 100],
+      ['1,1', 'amber', 4, 250],
+    ]);
+    expect(demands).toEqual([{ hex_q: 1, hex_r: 1, good: 'amber', price: 4, volume: 250 }]);
+    expect(warnings).toHaveLength(4);
+    expect(warnings[0]).toContain('row 1');
+    expect(warnings[1]).toContain('row 2');
+    expect(warnings[1]).toContain('"cheap"');
+  });
+
+  it('warns on a header row instead of throwing', () => {
+    const { demands, warnings } = parseDemands([['Hex', 'Good', 'Price', 'Volume']]);
+    expect(demands).toEqual([]);
+    expect(warnings).toHaveLength(1);
   });
 });
 

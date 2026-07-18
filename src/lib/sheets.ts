@@ -208,6 +208,58 @@ export function parseGoods(rows: RawCell[][]): Good[] {
   return goods;
 }
 
+// ── Demands (admin sheet "Demands" tab) ───────────────────────────────────────
+
+// A market for one good in one hex: the price paid per unit, and the volume
+// (units/day) the market absorbs — split evenly among all armies selling that
+// good there. GMs edit the tab live, so bad rows produce warnings for the
+// tick log rather than errors that would abort processing.
+export type Demand = {
+  hex_q: number;
+  hex_r: number;
+  good: string;
+  price: number;
+  volume: number;
+};
+
+export function parseDemands(rows: RawCell[][]): { demands: Demand[]; warnings: string[] } {
+  const demands: Demand[] = [];
+  const warnings: string[] = [];
+
+  rows.forEach((row, i) => {
+    const [hex, good, price, volume] = [row[0], row[1], row[2], row[3]];
+    if ([hex, good, price, volume].every(blank)) return;
+
+    const skip = (why: string) => warnings.push(`⚠️ Demands row ${i + 1}: ${why} — row skipped.`);
+
+    const hexMatch = String(hex ?? '')
+      .trim()
+      .match(/^(-?\d+)\s*,\s*(-?\d+)$/);
+    if (!hexMatch) return skip(`hex "${String(hex ?? '').trim()}" is not "q,r"`);
+
+    const goodName = String(good ?? '').trim();
+    if (!goodName) return skip('good name is missing');
+
+    const priceNum = Number(price);
+    if (blank(price) || isNaN(priceNum) || priceNum < 0)
+      return skip(`price "${String(price ?? '').trim()}" is not a valid number`);
+
+    const volumeNum = Number(volume);
+    if (blank(volume) || isNaN(volumeNum) || volumeNum <= 0)
+      return skip(`volume "${String(volume ?? '').trim()}" is not a valid number`);
+
+    demands.push({
+      hex_q: parseInt(hexMatch[1], 10),
+      hex_r: parseInt(hexMatch[2], 10),
+      good: goodName,
+      price: priceNum,
+      volume: Math.round(volumeNum),
+    });
+  });
+
+  return { demands, warnings };
+}
+
 export function parseSheetStats(
   cells: StatCells,
   infantryRows: RawCell[][],
@@ -307,6 +359,19 @@ export async function appendToAdminSheet(tab: string, row: (string | number)[]):
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row.map(String)] },
   });
+}
+
+// ── Demands tab ────────────────────────────────────────────────────────────
+
+export async function fetchDemands(): Promise<{ demands: Demand[]; warnings: string[] }> {
+  const sheetId = process.env.ADMIN_SHEET_ID;
+  if (!sheetId) throw new Error('ADMIN_SHEET_ID is not set in .env');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: 'Demands!A2:D',
+  });
+  return parseDemands((res.data.values ?? []) as RawCell[][]);
 }
 
 // ── Queue tab ──────────────────────────────────────────────────────────────
@@ -440,6 +505,20 @@ export function statWriteData(
     { range: 'forced_march', values: [[stats.forced_march ? 1 : 0]] },
     { range: 'night_march', values: [[stats.night_march ? 1 : 0]] },
   ];
+}
+
+// Rewrites the goods named range: clear the whole range first so rows that
+// sold out disappear, then write the remaining name | count rows.
+export async function writeGoods(sheetId: string, goods: Good[]): Promise<void> {
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  await sheets.spreadsheets.values.clear({ spreadsheetId: sheetId, range: 'goods' });
+  if (goods.length === 0) return;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: 'goods',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: goods.map((g) => [g.name, g.count]) },
+  });
 }
 
 export async function syncArmySheet(sheetId: string, stats: ArmySheetStats): Promise<void> {

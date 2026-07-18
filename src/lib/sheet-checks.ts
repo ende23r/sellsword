@@ -96,6 +96,49 @@ export async function checkMessagesTab(
   return results;
 }
 
+// These must match the columns read by fetchDemands/parseDemands in sheets.ts
+export const DEMANDS_TAB_HEADERS = ['Hex', 'Good', 'Price', 'Volume'];
+
+export async function checkDemandsTab(
+  sheets: sheets_v4.Sheets,
+  sheetId: string,
+): Promise<CheckResult[]> {
+  const results: CheckResult[] = [];
+
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: 'sheets.properties.title',
+  });
+
+  const tabs = (meta.data.sheets ?? []).map((s) => s.properties?.title ?? '');
+  const tabExists = tabs.includes('Demands');
+
+  results.push({
+    label: 'Admin sheet has a "Demands" tab',
+    ok: tabExists,
+    detail: tabExists ? undefined : `found tabs: ${tabs.join(', ') || '(none)'}`,
+  });
+
+  if (!tabExists) return results;
+
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: 'Demands!1:1',
+  });
+
+  const row: string[] = (headerRes.data.values ?? [])[0] ?? [];
+  const expected = DEMANDS_TAB_HEADERS;
+  const headersMatch = expected.length === row.length && expected.every((h, i) => row[i] === h);
+
+  results.push({
+    label: `Demands tab has expected header row (${expected.join(', ')})`,
+    ok: headersMatch,
+    detail: headersMatch ? undefined : `found: ${row.join(', ') || '(empty)'}`,
+  });
+
+  return results;
+}
+
 export async function checkStatsNamedRanges(
   sheets: sheets_v4.Sheets,
   sheetId: string,

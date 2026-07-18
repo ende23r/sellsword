@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { STAT_RANGE_NAMES } from './sheets.js';
 import {
+  DEMANDS_TAB_HEADERS,
   MESSAGES_TAB_HEADERS,
   QUEUE_TAB_HEADERS,
+  checkDemandsTab,
   checkMessagesTab,
   checkQueueTab,
   checkStatsNamedRanges,
@@ -128,6 +130,54 @@ describe('checkMessagesTab', () => {
   it('fails when Messages tab is missing the ID column', async () => {
     const results = await checkMessagesTab(
       makeMessagesSheets({ headerRow: ['Timestamp', 'Sender', 'Recipient', 'Content', 'Deliver At'] }) as any,
+      'sheet-id',
+    );
+    const headerCheck = results.find((r) => r.label.includes('header'));
+    expect(headerCheck?.ok).toBe(false);
+  });
+});
+
+// ── Demands tab ───────────────────────────────────────────────────────────────
+
+function makeDemandsSheets({
+  tabs = ['Queue', 'Messages', 'Demands'],
+  headerRow = DEMANDS_TAB_HEADERS,
+}: {
+  tabs?: string[];
+  headerRow?: string[] | null;
+} = {}) {
+  return {
+    spreadsheets: {
+      get: vi.fn().mockResolvedValue({
+        data: { sheets: tabs.map((title) => ({ properties: { title } })) },
+      }),
+      values: {
+        get: vi.fn().mockResolvedValue({
+          data: { values: headerRow ? [headerRow] : [] },
+        }),
+      },
+    },
+  };
+}
+
+describe('checkDemandsTab', () => {
+  it('passes when Demands tab exists with correct headers', async () => {
+    const results = await checkDemandsTab(makeDemandsSheets() as any, 'sheet-id');
+    expect(results.every((r) => r.ok)).toBe(true);
+  });
+
+  it('fails when Demands tab does not exist', async () => {
+    const results = await checkDemandsTab(
+      makeDemandsSheets({ tabs: ['Queue', 'Messages'] }) as any,
+      'sheet-id',
+    );
+    const tabCheck = results.find((r) => r.label.includes('"Demands" tab'));
+    expect(tabCheck?.ok).toBe(false);
+  });
+
+  it('fails when Demands tab has wrong headers', async () => {
+    const results = await checkDemandsTab(
+      makeDemandsSheets({ headerRow: ['Wrong', 'Headers'] }) as any,
       'sheet-id',
     );
     const headerCheck = results.find((r) => r.label.includes('header'));

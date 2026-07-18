@@ -1,7 +1,7 @@
 import { OverwriteType, PermissionFlagsBits, type TextChannel } from 'discord.js';
 import db, { deleteConferenceChannel, getAllConferenceChannels, getCommanderByArmyId, type CommanderRow } from './db.js';
 import type { ArmySheetStats } from './sheets.js';
-import { extractSheetId, fetchArmyStats, syncArmySheet } from './sheets.js';
+import { extractSheetId, fetchArmyStats, fetchDemands, syncArmySheet, writeGoods } from './sheets.js';
 import {
   consumeSupplies,
   deliverMessages,
@@ -9,6 +9,7 @@ import {
   processForage,
   processMovement,
   processNightMarchMovement,
+  processSellOrders,
   validateArmyPositions,
 } from './tick-processors.js';
 
@@ -44,6 +45,7 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
     );
     const movedArmyIds = processMovement(db, statsMap, log);
     processForage(db, statsMap, log, movingArmyIds);
+    await runSellOrders(statsMap, log);
     await removeMoversFromConferences(movedArmyIds, client);
   }
 
@@ -72,6 +74,47 @@ async function fetchAllArmyStats(log: string[]): Promise<Map<number, ArmySheetSt
     }
   }
   return statsMap;
+}
+
+async function runSellOrders(statsMap: Map<number, ArmySheetStats>, log: string[]): Promise<void> {
+  const openSellOrders = (
+    db
+      .prepare("SELECT COUNT(*) AS n FROM orders WHERE processed_at IS NULL AND type = 'sell'")
+      .get() as { n: number }
+  ).n;
+  if (openSellOrders === 0) return;
+
+  // If the Demands tab can't be read, skip sell processing entirely — running
+  // with an empty demand list would wrongly cancel every open sell order.
+  let demands;
+  try {
+    const fetched = await fetchDemands();
+    demands = fetched.demands;
+    log.push(...fetched.warnings);
+  } catch (err) {
+    log.push(
+      `⚠️ Could not read the Demands tab — sell orders skipped this tick: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  const changed = processSellOrders(db, statsMap, demands, log);
+
+  // Selling is the one mechanic that changes the goods table, so the bot
+  // rewrites it; everything else on the sheet's tables stays GM-owned.
+  for (const armyId of changed) {
+    const commander = getCommanderByArmyId(armyId);
+    const sheetId = extractSheetId(commander?.army_sheet_url);
+    const stats = statsMap.get(armyId);
+    if (!sheetId || !stats) continue;
+    try {
+      await writeGoods(sheetId, stats.goods);
+    } catch (err) {
+      log.push(
+        `⚠️ Failed to update goods on army ${armyId}'s sheet after selling: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 }
 
 async function syncSheets(statsMap: Map<number, ArmySheetStats>, log: string[]): Promise<void> {

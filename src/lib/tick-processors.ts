@@ -5,7 +5,13 @@
 import type Database from 'better-sqlite3';
 import { EmbedBuilder, type Client, type TextChannel } from 'discord.js';
 import type { ArmyRow, HexRow, OrderRow } from './db.js'; // type-only: no side effects
-import { isCavalryOnly, supplyUpkeep, totalWagons, type ArmySheetStats } from './sheets.js';
+import {
+  isCavalryOnly,
+  supplyUpkeep,
+  totalWagons,
+  type ArmySheetStats,
+  type Demand,
+} from './sheets.js';
 import { findPath, hexesInRange } from './hex.js';
 
 type Log = string[];
@@ -220,6 +226,90 @@ export function processForage(
 
     markOrderProcessed(database, order.id);
   }
+}
+
+// ── Sell orders (night tick) ─────────────────────────────────────────────────
+
+// A sell order is a series of one-day rests at market: each day the army sells
+// goods that match a Demand in its hex. A demand's daily volume is split
+// evenly among all armies selling that good there, so competing merchants
+// reduce each other's revenue. The order completes when the army holds no
+// goods matching any demand in its hex; unmatched goods stay in inventory.
+// Returns the IDs of armies whose goods changed (their sheets' goods tables
+// need rewriting).
+export function processSellOrders(
+  database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
+  demands: Demand[],
+  log: Log,
+): Set<number> {
+  const orders = database
+    .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'sell'")
+    .all() as OrderRow[];
+  const changed = new Set<number>();
+  if (orders.length === 0) return changed;
+
+  const norm = (name: string) => name.trim().toLowerCase();
+  const armyName = (id: number): string => {
+    const row = database.prepare('SELECT name FROM armies WHERE id = ?').get(id) as
+      | { name: string | null }
+      | undefined;
+    return row?.name ?? String(id);
+  };
+
+  for (const demand of demands) {
+    const sellers = orders.flatMap((order) => {
+      const s = stats.get(order.army_id);
+      if (!s || s.hex_q !== demand.hex_q || s.hex_r !== demand.hex_r) return [];
+      const good = s.goods.find((g) => norm(g.name) === norm(demand.good) && g.count > 0);
+      return good ? [{ order, s, good }] : [];
+    });
+    if (sellers.length === 0) continue;
+
+    const share = Math.floor(demand.volume / sellers.length);
+    for (const { order, s, good } of sellers) {
+      const sold = Math.min(share, good.count);
+      if (sold <= 0) continue;
+      good.count -= sold;
+      const earned = Math.round(sold * demand.price);
+      s.coin += earned;
+      changed.add(order.army_id);
+      log.push(
+        `💰 **${armyName(order.army_id)}** sold ${sold.toLocaleString()} ${good.name} for ${earned.toLocaleString()} coin at (${demand.hex_q},${demand.hex_r})` +
+          (sellers.length > 1 ? ` (market split ${sellers.length} ways)` : '') +
+          '.',
+      );
+    }
+  }
+
+  for (const armyId of changed) {
+    const s = stats.get(armyId)!;
+    s.goods = s.goods.filter((g) => g.count > 0);
+  }
+
+  for (const order of orders) {
+    const s = stats.get(order.army_id);
+    if (!s) continue;
+    const marketableRemains = s.goods.some(
+      (g) =>
+        g.count > 0 &&
+        demands.some(
+          (d) => d.hex_q === s.hex_q && d.hex_r === s.hex_r && norm(d.good) === norm(g.name),
+        ),
+    );
+    if (marketableRemains) continue; // keep resting and selling tomorrow
+
+    markOrderProcessed(database, order.id);
+    if (changed.has(order.army_id)) {
+      log.push(`✅ **${armyName(order.army_id)}** has sold all marketable goods — sell order complete.`);
+    } else {
+      log.push(
+        `⚠️ **${armyName(order.army_id)}** has nothing to sell at (${s.hex_q},${s.hex_r}) — sell order cancelled.`,
+      );
+    }
+  }
+
+  return changed;
 }
 
 // ── Message delivery (every tick) ────────────────────────────────────────────

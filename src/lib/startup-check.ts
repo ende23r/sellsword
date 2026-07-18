@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { google } from 'googleapis';
 import type { Client } from 'discord.js';
-import { checkMessagesTab, checkQueueTab, checkStatsNamedRanges } from './sheet-checks.js';
+import { checkDemandsTab, checkMessagesTab, checkQueueTab, checkStatsNamedRanges } from './sheet-checks.js';
 
 type CheckResult = { label: string; ok: boolean; detail?: string };
 
@@ -94,11 +94,12 @@ async function checkAdminSheet(
       label: `Admin sheet "${res.data.properties?.title}" is accessible`,
       ok: true,
     };
-    const [queueChecks, messagesChecks] = await Promise.all([
+    const [queueChecks, messagesChecks, demandsChecks] = await Promise.all([
       checkQueueTab(sheets, sheetId),
       checkMessagesTab(sheets, sheetId),
+      checkDemandsTab(sheets, sheetId),
     ]);
-    return [accessible, ...queueChecks, ...messagesChecks];
+    return [accessible, ...queueChecks, ...messagesChecks, ...demandsChecks];
   } catch (err) {
     return [{ label: 'Admin sheet is accessible', ok: false, detail: (err as Error).message }];
   }

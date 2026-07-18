@@ -13,6 +13,31 @@ db.exec(DB_SCHEMA);
 // Migration: detachments live in the army sheets now; drop the unused table.
 db.exec('DROP TABLE IF EXISTS detachments');
 
+// Migration: rebuild orders if its CHECK constraint predates the 'sell' type
+// (SQLite cannot alter CHECK constraints in place).
+{
+  const ordersSql = (
+    db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get() as
+      | { sql: string }
+      | undefined
+  )?.sql;
+  if (ordersSql && !ordersSql.includes("'sell'")) {
+    db.exec(`
+      ALTER TABLE orders RENAME TO orders_old;
+      CREATE TABLE orders (
+        id           INTEGER PRIMARY KEY,
+        army_id      INTEGER NOT NULL REFERENCES armies(id),
+        type         TEXT NOT NULL CHECK(type IN ('forage', 'move', 'rest', 'torch', 'sell')),
+        parameters   TEXT NOT NULL DEFAULT '{}',
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        processed_at TEXT
+      );
+      INSERT INTO orders SELECT * FROM orders_old;
+      DROP TABLE orders_old;
+    `);
+  }
+}
+
 // Migration: add speed column to hexes if absent.
 {
   const hexesCols = db.pragma('table_info(hexes)') as { name: string }[];

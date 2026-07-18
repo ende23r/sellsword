@@ -10,6 +10,7 @@ import {
   processForage,
   processMovement,
   processNightMarchMovement,
+  processSellOrders,
   rollMarchMorale,
   supplyColor,
   validateArmyPositions,
@@ -140,6 +141,137 @@ describe('validateArmyPositions', () => {
     expect(log).toHaveLength(1);
     expect(log[0]).toContain(`army ${badId}`);
     expect(log[0]).toContain('(99,99)');
+  });
+});
+
+// ── processSellOrders ─────────────────────────────────────────────────────────
+
+describe('processSellOrders', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+  });
+
+  const silkDemand = { hex_q: 0, hex_r: 0, good: 'silk', price: 2, volume: 500 };
+
+  it('sells all held goods when under the market volume and completes the order', () => {
+    const id = seedArmy(db, { name: 'Iron Legion' });
+    const orderId = seedOrder(db, id, 'sell');
+    const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 300 }], coin: 0 })]]);
+    const log: string[] = [];
+
+    const changed = processSellOrders(db, stats, [silkDemand], log);
+
+    expect(stats.get(id)!.coin).toBe(600); // 300 × 2
+    expect(stats.get(id)!.goods).toEqual([]);
+    expect(changed).toEqual(new Set([id]));
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as { processed_at: string | null };
+    expect(order.processed_at).not.toBeNull();
+    expect(log.join('\n')).toContain('Iron Legion');
+    expect(log.join('\n')).toContain('300');
+  });
+
+  it('caps daily sales at the demand volume and keeps the order open', () => {
+    const id = seedArmy(db);
+    const orderId = seedOrder(db, id, 'sell');
+    const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 800 }], coin: 0 })]]);
+
+    processSellOrders(db, stats, [silkDemand], []);
+
+    expect(stats.get(id)!.coin).toBe(1000); // 500 × 2
+    expect(stats.get(id)!.goods).toEqual([{ name: 'silk', count: 300 }]);
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as { processed_at: string | null };
+    expect(order.processed_at).toBeNull(); // still selling tomorrow
+  });
+
+  it('splits the volume evenly among sellers of the same good in the hex', () => {
+    const a = seedArmy(db);
+    const b = seedArmy(db);
+    seedOrder(db, a, 'sell');
+    seedOrder(db, b, 'sell');
+    const stats = new Map([
+      [a, makeStats({ goods: [{ name: 'silk', count: 400 }], coin: 0 })],
+      [b, makeStats({ goods: [{ name: 'silk', count: 400 }], coin: 0 })],
+    ]);
+
+    processSellOrders(db, stats, [silkDemand], []);
+
+    // 500 volume / 2 sellers = 250 each
+    expect(stats.get(a)!.coin).toBe(500);
+    expect(stats.get(b)!.coin).toBe(500);
+    expect(stats.get(a)!.goods).toEqual([{ name: 'silk', count: 150 }]);
+    expect(stats.get(b)!.goods).toEqual([{ name: 'silk', count: 150 }]);
+  });
+
+  it('a seller holding less than its share sells only what it has', () => {
+    const a = seedArmy(db);
+    const b = seedArmy(db);
+    seedOrder(db, a, 'sell');
+    seedOrder(db, b, 'sell');
+    const stats = new Map([
+      [a, makeStats({ goods: [{ name: 'silk', count: 100 }], coin: 0 })],
+      [b, makeStats({ goods: [{ name: 'silk', count: 400 }], coin: 0 })],
+    ]);
+
+    processSellOrders(db, stats, [silkDemand], []);
+
+    expect(stats.get(a)!.coin).toBe(200); // all 100
+    expect(stats.get(b)!.coin).toBe(500); // its 250 share
+  });
+
+  it('only sells goods matching a demand — the rest stay in inventory', () => {
+    const id = seedArmy(db);
+    const orderId = seedOrder(db, id, 'sell');
+    const stats = new Map([
+      [id, makeStats({ goods: [{ name: 'silk', count: 100 }, { name: 'furs', count: 50 }], coin: 0 })],
+    ]);
+
+    processSellOrders(db, stats, [silkDemand], []);
+
+    expect(stats.get(id)!.coin).toBe(200);
+    expect(stats.get(id)!.goods).toEqual([{ name: 'furs', count: 50 }]);
+    // No demand for furs → nothing marketable left → order complete
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as { processed_at: string | null };
+    expect(order.processed_at).not.toBeNull();
+  });
+
+  it('matches good names case-insensitively', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'sell');
+    const stats = new Map([[id, makeStats({ goods: [{ name: 'Silk', count: 100 }], coin: 0 })]]);
+
+    processSellOrders(db, stats, [silkDemand], []);
+
+    expect(stats.get(id)!.coin).toBe(200);
+  });
+
+  it('ignores demands in other hexes', () => {
+    const id = seedArmy(db);
+    const orderId = seedOrder(db, id, 'sell');
+    const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 100 }], coin: 0, hex_q: 5, hex_r: 5 })]]);
+    const log: string[] = [];
+
+    const changed = processSellOrders(db, stats, [silkDemand], log);
+
+    expect(stats.get(id)!.coin).toBe(0);
+    expect(stats.get(id)!.goods).toEqual([{ name: 'silk', count: 100 }]);
+    expect(changed.size).toBe(0);
+    // Nothing sellable here — order cancelled with a warning
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as { processed_at: string | null };
+    expect(order.processed_at).not.toBeNull();
+    expect(log.join('\n')).toContain('nothing to sell');
+  });
+
+  it('rounds coin from fractional prices', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'sell');
+    const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 101 }], coin: 0 })]]);
+
+    processSellOrders(db, stats, [{ ...silkDemand, price: 0.5 }], []);
+
+    expect(stats.get(id)!.coin).toBe(51); // round(101 × 0.5)
   });
 });
 
