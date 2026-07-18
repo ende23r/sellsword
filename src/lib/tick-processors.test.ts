@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
 import type { ArmySheetStats } from './sheets.js';
 import {
@@ -10,6 +10,7 @@ import {
   processForage,
   processMovement,
   processNightMarchMovement,
+  rollMarchMorale,
   supplyColor,
 } from './tick-processors.js';
 
@@ -744,6 +745,126 @@ describe('postSupplyUpdates', () => {
     };
     await postSupplyUpdates(db, stats, badClient as never, log, new Date());
     expect(log.some((l) => l.includes('supply update'))).toBe(true);
+  });
+});
+
+// ── processNightMarchMovement ─────────────────────────────────────────────────
+
+describe('processNightMarchMovement', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+    seedHex(db, 0, 0);
+    seedHex(db, 1, 0);
+    seedHex(db, 2, 0);
+    // Alternating rolls: never doubles, so morale checks stay quiet unless a test overrides
+    let i = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => (i++ % 2 === 0 ? 0.1 : 0.9));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('moves a night-marching army 1 hex toward its destination', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'move', { dest_q: 2, dest_r: 0, roads_only: true });
+    const stats = new Map([[id, makeStats({ night_march: true })]]);
+
+    processNightMarchMovement(db, stats, []);
+
+    expect(stats.get(id)!.hex_q).toBe(1);
+    const order = db.prepare('SELECT processed_at FROM orders WHERE army_id = ?').get(id) as {
+      processed_at: string | null;
+    };
+    expect(order.processed_at).toBeNull(); // not yet arrived
+  });
+
+  it('moves 2 hexes when also forced marching', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'move', { dest_q: 2, dest_r: 0, roads_only: true });
+    const stats = new Map([[id, makeStats({ night_march: true, forced_march: true })]]);
+
+    processNightMarchMovement(db, stats, []);
+
+    expect(stats.get(id)!.hex_q).toBe(2);
+    const order = db.prepare('SELECT processed_at FROM orders WHERE army_id = ?').get(id) as {
+      processed_at: string | null;
+    };
+    expect(order.processed_at).not.toBeNull(); // arrived
+  });
+
+  it('skips armies that are not night marching', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'move', { dest_q: 2, dest_r: 0, roads_only: true });
+    const stats = new Map([[id, makeStats({ night_march: false })]]);
+
+    processNightMarchMovement(db, stats, []);
+
+    expect(stats.get(id)!.hex_q).toBe(0);
+  });
+
+  it('warns and holds when the order is off-road', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'move', { dest_q: 2, dest_r: 0, roads_only: false });
+    const stats = new Map([[id, makeStats({ night_march: true })]]);
+    const log: string[] = [];
+
+    processNightMarchMovement(db, stats, log);
+
+    expect(stats.get(id)!.hex_q).toBe(0);
+    expect(log.some((l) => l.includes('off-road'))).toBe(true);
+  });
+
+  it('applies the night march morale check on doubles', () => {
+    vi.mocked(Math.random).mockReturnValue(0.99); // both dice roll 6
+    const id = seedArmy(db);
+    seedOrder(db, id, 'move', { dest_q: 2, dest_r: 0, roads_only: true });
+    const stats = new Map([[id, makeStats({ night_march: true, morale: 9 })]]);
+    const log: string[] = [];
+
+    processNightMarchMovement(db, stats, log);
+
+    expect(stats.get(id)!.morale).toBe(8);
+    expect(log.some((l) => l.includes('night march'))).toBe(true);
+  });
+});
+
+// ── rollMarchMorale ───────────────────────────────────────────────────────────
+
+describe('rollMarchMorale', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('loses 1 morale on doubles', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.99); // both dice roll 6
+    const stats = new Map([[1, makeStats({ morale: 9 })]]);
+    const log: string[] = [];
+
+    rollMarchMorale(stats, 1, 'Legion', 'forced', log);
+
+    expect(stats.get(1)!.morale).toBe(8);
+    expect(log.some((l) => l.includes('lost 1 morale'))).toBe(true);
+  });
+
+  it('does nothing when the dice differ', () => {
+    let i = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => (i++ % 2 === 0 ? 0.1 : 0.9));
+    const stats = new Map([[1, makeStats({ morale: 9 })]]);
+    const log: string[] = [];
+
+    rollMarchMorale(stats, 1, 'Legion', 'night', log);
+
+    expect(stats.get(1)!.morale).toBe(9);
+    expect(log).toHaveLength(0);
+  });
+
+  it('does not drop morale below 1', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.99);
+    const stats = new Map([[1, makeStats({ morale: 1 })]]);
+
+    rollMarchMorale(stats, 1, 'Legion', 'forced', []);
+
+    expect(stats.get(1)!.morale).toBe(1);
   });
 });
 
