@@ -17,7 +17,7 @@ function makeRows(overrides: Record<number, string | number | null> = {}): (stri
     100,   // 7  coin
     20,    // 8  goods
     '0,0', // 9  hex (display only)
-    'allow', // 10 stance
+    'allow_passage', // 10 stance
     900,   // 11 infantry_strength
     400,   // 12 cavalry_strength
     2,     // 13 scouting_range
@@ -41,7 +41,7 @@ describe('parseSheetStats', () => {
       supplies: 5000,
       coin: 100,
       goods: 20,
-      stance: 'allow',
+      stance: 'allow_passage',
       infantry_strength: 900,
       cavalry_strength: 400,
       scouting_range: 2,
@@ -69,7 +69,7 @@ describe('parseSheetStats', () => {
       supplies: 0,
       coin: 0,
       goods: 0,
-      stance: 'allow',
+      stance: 'allow_passage',
       infantry_strength: 0,
       cavalry_strength: 0,
       scouting_range: 1,
@@ -113,14 +113,17 @@ describe('parseSheetStats', () => {
     expect(stats.morale).toBe(9);
   });
 
-  it('parses stance "block"', () => {
-    const stats = parseSheetStats(makeRows({ 10: 'block' }));
-    expect(stats.stance).toBe('block');
+  it('parses stance "engage"', () => {
+    expect(parseSheetStats(makeRows({ 10: 'engage' })).stance).toBe('engage');
   });
 
-  it('defaults stance to "allow" for unknown values', () => {
-    expect(parseSheetStats(makeRows({ 10: 'invalid' })).stance).toBe('allow');
-    expect(parseSheetStats(makeRows({ 10: null })).stance).toBe('allow');
+  it('treats legacy "block" as "engage"', () => {
+    expect(parseSheetStats(makeRows({ 10: 'block' })).stance).toBe('engage');
+  });
+
+  it('defaults stance to "allow_passage" for unknown values', () => {
+    expect(parseSheetStats(makeRows({ 10: 'invalid' })).stance).toBe('allow_passage');
+    expect(parseSheetStats(makeRows({ 10: null })).stance).toBe('allow_passage');
   });
 
   it('parses forced_march as boolean from 1/0', () => {

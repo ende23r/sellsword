@@ -6,15 +6,15 @@ import type { Command } from '../types.js';
 const stance: Command = {
   data: new SlashCommandBuilder()
     .setName('stance')
-    .setDescription('Set whether your army blocks or allows passage through its hex.')
+    .setDescription('Set how your army responds to enemies entering its hex.')
     .addStringOption((o) =>
       o
         .setName('posture')
-        .setDescription('block: deny passage; allow: let armies through')
+        .setDescription('allow_passage: let armies through; engage: intercept enemies')
         .setRequired(true)
         .addChoices(
-          { name: 'Allow passage', value: 'allow' },
-          { name: 'Block passage', value: 'block' },
+          { name: 'Allow passage', value: 'allow_passage' },
+          { name: 'Engage', value: 'engage' },
         ),
     ),
 
@@ -32,13 +32,13 @@ const stance: Command = {
       return;
     }
 
-    const posture = interaction.options.getString('posture', true) as 'allow' | 'block';
+    const posture = interaction.options.getString('posture', true) as 'allow_passage' | 'engage';
     await writeStance(sheetId, posture);
 
     await interaction.reply(
-      posture === 'block'
-        ? '✅ Stance set to **block**. Your army will deny passage to armies that enter your hex.'
-        : '✅ Stance set to **allow**. Your army will permit passage through its hex.',
+      posture === 'engage'
+        ? '✅ Stance set to **engage**. Your army will intercept enemies that enter your hex and halt their movement.'
+        : '✅ Stance set to **allow passage**. Your army will permit armies to pass through its hex.',
     );
   },
 };

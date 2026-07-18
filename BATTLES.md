@@ -6,7 +6,16 @@ Battles are resolved immediately when the GM runs `/battle`. The bot computes mo
 
 ## Trigger
 
-When armies share a hex after movement, `checkArmyCollisions` posts a notice to the admin channel. The GM decides whether they fight and runs `/battle` if so. Armies do not automatically engage.
+Battles are triggered by **stance**. Each army has one of two stances (set with `/stance`):
+
+- **Allow passage** (default) — the army lets other armies move through its hex without interference.
+- **Engage** — the army intercepts enemies that enter its hex, halting their movement there.
+
+When a moving army's path passes through a hex occupied by an enemy army in **engage** stance, the moving army is stopped in that hex at the end of the tick. After all movement resolves, `checkArmyCollisions` posts an ⚔️ **ENGAGE** notice to the admin channel naming the intercepting army.
+
+The GM then runs `/battle` to resolve the fight. The engaging army should be treated as the attacker (use `attacker_id`).
+
+Armies from the **same faction** never trigger an engage, even if the stance is set to engage. Two armies that are both in allow-passage stance and happen to share a hex do not trigger a battle notice.
 
 ## Command
 

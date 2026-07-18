@@ -46,6 +46,14 @@ export function processNightMarchMovement(
     .all() as OrderRow[];
   const validCoords = buildValidCoords(database);
 
+  const factions = new Map<number, number | null>(
+    (
+      database
+        .prepare('SELECT a.id, c.faction_id FROM armies a JOIN commanders c ON c.id = a.commander_id')
+        .all() as { id: number; faction_id: number | null }[]
+    ).map((r) => [r.id, r.faction_id]),
+  );
+
   for (const order of orders) {
     const army = database
       .prepare('SELECT * FROM armies WHERE id = ?')
@@ -63,7 +71,7 @@ export function processNightMarchMovement(
 
     // 6 miles/night = 1 hex; forced march adds another (12 miles = 2 hexes)
     const hexesAllowed = s.forced_march ? 2 : 1;
-    advanceArmy(database, army, order, hexesAllowed, validCoords, log);
+    advanceArmy(database, army, order, hexesAllowed, validCoords, stats, factions, log);
     rollMarchMorale(stats, army.id, army.name ?? String(army.id), 'night', log);
   }
 }
@@ -80,6 +88,15 @@ export function processMovement(
     .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'move'")
     .all() as OrderRow[];
   const validCoords = buildValidCoords(database);
+
+  // Faction map for engage interception checks
+  const factions = new Map<number, number | null>(
+    (
+      database
+        .prepare('SELECT a.id, c.faction_id FROM armies a JOIN commanders c ON c.id = a.commander_id')
+        .all() as { id: number; faction_id: number | null }[]
+    ).map((r) => [r.id, r.faction_id]),
+  );
 
   for (const order of orders) {
     const army = database
@@ -109,7 +126,7 @@ export function processMovement(
     const hexesAllowed = Math.floor((hexSpeed * speedMultiplier) / 6);
     if (hexesAllowed === 0) continue;
 
-    const didMove = advanceArmy(database, army, order, hexesAllowed, validCoords, log);
+    const didMove = advanceArmy(database, army, order, hexesAllowed, validCoords, stats, factions, log);
     if (didMove) moved.add(army.id);
 
     if (forced) {
@@ -117,7 +134,7 @@ export function processMovement(
     }
   }
 
-  checkArmyCollisions(database, log);
+  checkArmyCollisions(database, stats, factions, log);
   return moved;
 }
 
@@ -327,6 +344,8 @@ function advanceArmy(
   order: OrderRow,
   hexesAllowed: number,
   validCoords: Set<string>,
+  stats: Map<number, ArmySheetStats>,
+  factions: Map<number, number | null>,
   log: Log,
 ): boolean {
   const params = JSON.parse(order.parameters) as { dest_q: number; dest_r: number };
@@ -347,7 +366,26 @@ function advanceArmy(
     return false;
   }
 
-  const dest = path[Math.min(hexesAllowed, path.length) - 1];
+  // Walk the path step by step; stop early if an engaging enemy is encountered
+  const myFaction = factions.get(army.id);
+  const stepsAllowed = Math.min(hexesAllowed, path.length);
+  let destIndex = stepsAllowed - 1;
+  for (let i = 0; i < stepsAllowed; i++) {
+    const step = path[i];
+    const others = database
+      .prepare('SELECT id FROM armies WHERE hex_q = ? AND hex_r = ? AND id != ?')
+      .all(step.q, step.r, army.id) as { id: number }[];
+    const interceptor = others.find((o) => {
+      const s = stats.get(o.id);
+      return s?.stance === 'engage' && factions.get(o.id) !== myFaction;
+    });
+    if (interceptor) {
+      destIndex = i;
+      break;
+    }
+  }
+
+  const dest = path[destIndex];
   database
     .prepare('UPDATE armies SET hex_q = ?, hex_r = ? WHERE id = ?')
     .run(dest.q, dest.r, army.id);
@@ -384,7 +422,12 @@ function markOrderProcessed(database: Database.Database, orderId: number): void 
     .run(orderId);
 }
 
-function checkArmyCollisions(database: Database.Database, log: Log): void {
+function checkArmyCollisions(
+  database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
+  factions: Map<number, number | null>,
+  log: Log,
+): void {
   const armies = database.prepare('SELECT * FROM armies').all() as ArmyRow[];
   const byHex = new Map<string, ArmyRow[]>();
   for (const army of armies) {
@@ -393,9 +436,23 @@ function checkArmyCollisions(database: Database.Database, log: Log): void {
     byHex.get(key)!.push(army);
   }
   for (const [hex, group] of byHex) {
-    if (group.length > 1) {
-      const names = group.map((a) => `**${a.name ?? a.id}**`).join(', ');
-      log.push(`⚔️ Multiple armies at (${hex}): ${names}`);
+    if (group.length < 2) continue;
+    // Find any engaging armies
+    const engagers = group.filter((a) => stats.get(a.id)?.stance === 'engage');
+    if (engagers.length === 0) continue;
+    // Only notify when at least two different factions are present
+    const factionsPresent = new Set(group.map((a) => factions.get(a.id)));
+    if (factionsPresent.size < 2) continue;
+
+    for (const engager of engagers) {
+      const enemies = group.filter(
+        (a) => a.id !== engager.id && factions.get(a.id) !== factions.get(engager.id),
+      );
+      if (enemies.length === 0) continue;
+      const enemyNames = enemies.map((a) => `**${a.name ?? a.id}**`).join(', ');
+      log.push(
+        `⚔️ **ENGAGE** at (${hex}): **${engager.name ?? engager.id}** intercepted ${enemyNames}. Use \`/battle army_a:${engager.id}\` to resolve.`,
+      );
     }
   }
 }

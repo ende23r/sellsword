@@ -40,7 +40,7 @@ function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
     supplies: 10000,
     coin: 0,
     goods: 0,
-    stance: 'allow',
+    stance: 'allow_passage',
     forced_march: false,
     night_march: false,
     ...overrides,

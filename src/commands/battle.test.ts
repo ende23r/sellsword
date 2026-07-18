@@ -44,7 +44,7 @@ const mockBattleOutcome = {
 const mockStats = {
   infantry: 1000, infantry_strength: 0, cavalry: 0, cavalry_strength: 0,
   wagons: 0, noncombatants: 0, scouting_range: 1, morale: 9, resting_morale: 9,
-  max_morale: 12, supplies: 10000, coin: 0, goods: 0, stance: 'allow' as const,
+  max_morale: 12, supplies: 10000, coin: 0, goods: 0, stance: 'allow_passage' as const,
   forced_march: false, night_march: false,
 };
 

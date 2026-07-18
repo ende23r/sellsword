@@ -29,7 +29,7 @@ export type ArmySheetStats = {
   coin: number;
   goods: number;
   // State
-  stance: 'allow' | 'block';
+  stance: 'allow_passage' | 'engage';
   // Combat strengths (sheet-calculated; bot reads only)
   infantry_strength: number;
   cavalry_strength: number;
@@ -98,8 +98,9 @@ export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetSt
     const s = String(v).trim().toLowerCase();
     return s === '1' || s === 'true' || s === 'yes';
   };
-  const stance = (v: string | number | null): 'allow' | 'block' => {
-    return String(v ?? '').trim().toLowerCase() === 'block' ? 'block' : 'allow';
+  const stance = (v: string | number | null): 'allow_passage' | 'engage' => {
+    const s = String(v ?? '').trim().toLowerCase();
+    return s === 'engage' || s === 'block' ? 'engage' : 'allow_passage';
   };
 
   return {
@@ -282,7 +283,7 @@ export async function syncArmySheet(
   });
 }
 
-export async function writeStance(sheetId: string, stance: 'allow' | 'block'): Promise<void> {
+export async function writeStance(sheetId: string, stance: 'allow_passage' | 'engage'): Promise<void> {
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
   await sheets.spreadsheets.values.update({
     spreadsheetId: sheetId,

@@ -28,12 +28,14 @@ function seedArmy(
     name?: string;
     hex_q?: number;
     hex_r?: number;
+    faction_id?: number;
   } = {},
 ): number {
   const id = overrides.id ?? ++seq;
-  db.prepare('INSERT INTO commanders (id, discord_user_id) VALUES (?, ?)').run(
+  db.prepare('INSERT INTO commanders (id, discord_user_id, faction_id) VALUES (?, ?, ?)').run(
     id,
     `user-${id}`,
+    overrides.faction_id ?? null,
   );
   db.prepare(
     `INSERT INTO armies (id, commander_id, name, hex_q, hex_r) VALUES (?, ?, ?, ?, ?)`,
@@ -62,7 +64,7 @@ function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
     supplies: 10000,
     coin: 0,
     goods: 0,
-    stance: 'allow',
+    stance: 'allow_passage',
     forced_march: false,
     night_march: false,
     ...overrides,
@@ -390,6 +392,105 @@ describe('processMovement', () => {
 
     const moved = processMovement(db, stats, []);
     expect(moved.has(armyId)).toBe(false);
+  });
+
+  it('stops a moving army when it enters a hex with an engaging enemy', () => {
+    // Army A (faction 1) moving from (0,0) to (0,2); Army B (faction 2) is at (0,1) in engage stance
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
+    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
+    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2 });
+    seedHex(db, 0, 0, { speed: 12 }); // speed 12 → 2 hexes/tick off-road, so A would reach (0,2)
+    seedHex(db, 0, 1, { speed: 12 });
+    seedHex(db, 0, 2, { speed: 12 });
+    seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
+    const stats = new Map([
+      [aId, makeStats()],
+      [bId, makeStats({ stance: 'engage' })],
+    ]);
+
+    processMovement(db, stats, []);
+
+    const pos = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(aId) as { hex_r: number };
+    expect(pos.hex_r).toBe(1); // stopped at (0,1), not (0,2)
+  });
+
+  it('does not stop a moving army when the occupying army is in allow_passage stance', () => {
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
+    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
+    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2 });
+    seedHex(db, 0, 0, { speed: 12 });
+    seedHex(db, 0, 1, { speed: 12 });
+    seedHex(db, 0, 2, { speed: 12 });
+    seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
+    const stats = new Map([
+      [aId, makeStats()],
+      [bId, makeStats({ stance: 'allow_passage' })],
+    ]);
+
+    processMovement(db, stats, []);
+
+    const pos = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(aId) as { hex_r: number };
+    expect(pos.hex_r).toBe(2); // passed through to destination
+  });
+
+  it('does not stop a moving army when the engaging army is the same faction', () => {
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
+    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
+    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 1 });
+    seedHex(db, 0, 0, { speed: 12 });
+    seedHex(db, 0, 1, { speed: 12 });
+    seedHex(db, 0, 2, { speed: 12 });
+    seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
+    const stats = new Map([
+      [aId, makeStats()],
+      [bId, makeStats({ stance: 'engage' })],
+    ]);
+
+    processMovement(db, stats, []);
+
+    const pos = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(aId) as { hex_r: number };
+    expect(pos.hex_r).toBe(2); // ally — not blocked
+  });
+
+  it('logs an engage notification when enemy armies with engage stance share a hex', () => {
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
+    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1, name: 'Iron Legion' });
+    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2, name: 'Black Company' });
+    seedHex(db, 0, 0);
+    seedHex(db, 0, 1);
+    seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 1, roads_only: false });
+    const stats = new Map([
+      [aId, makeStats()],
+      [bId, makeStats({ stance: 'engage' })],
+    ]);
+
+    const log: string[] = [];
+    processMovement(db, stats, log);
+
+    expect(log.some((l) => l.includes('engage') || l.includes('Engage') || l.includes('ENGAGE'))).toBe(true);
+    expect(log.some((l) => l.includes('Black Company'))).toBe(true);
+  });
+
+  it('does not log a collision when all armies in a hex are allow_passage', () => {
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
+    db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
+    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
+    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2 });
+    seedHex(db, 0, 0);
+    seedHex(db, 0, 1);
+    seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 1, roads_only: false });
+    const stats = new Map([
+      [aId, makeStats()],
+      [bId, makeStats({ stance: 'allow_passage' })],
+    ]);
+
+    const log: string[] = [];
+    processMovement(db, stats, log);
+
+    expect(log.some((l) => l.includes('⚔️'))).toBe(false);
   });
 });
 

@@ -126,7 +126,7 @@ describe('/commission', () => {
     await command.execute(interaction as any);
     expect(mockSyncArmySheet).toHaveBeenCalledWith(
       'abc123',
-      expect.objectContaining({ morale: 9, resting_morale: 9, stance: 'allow', scouting_range: 1 }),
+      expect.objectContaining({ morale: 9, resting_morale: 9, stance: 'allow_passage', scouting_range: 1 }),
       4,
       -2,
     );
