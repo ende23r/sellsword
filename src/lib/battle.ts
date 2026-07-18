@@ -77,19 +77,20 @@ export function resolveBattle(
   const roll2d6 = () => Math.ceil(rng() * 6) + Math.ceil(rng() * 6);
   const roll1d6 = () => Math.ceil(rng() * 6);
 
-  const armyA = database.prepare('SELECT id, name, hex_q, hex_r FROM armies WHERE id = ?').get(armyAId) as ArmyRow | undefined;
-  const armyB = database.prepare('SELECT id, name, hex_q, hex_r FROM armies WHERE id = ?').get(armyBId) as ArmyRow | undefined;
+  const armyA = database.prepare('SELECT id, name FROM armies WHERE id = ?').get(armyAId) as ArmyRow | undefined;
+  const armyB = database.prepare('SELECT id, name FROM armies WHERE id = ?').get(armyBId) as ArmyRow | undefined;
 
   if (!armyA) return { error: `No army with ID ${armyAId}.` };
   if (!armyB) return { error: `No army with ID ${armyBId}.` };
-  if (armyA.hex_q !== armyB.hex_q || armyA.hex_r !== armyB.hex_r) {
-    return { error: `Armies are not in the same hex.` };
-  }
 
   const statsA = stats.get(armyAId);
   const statsB = stats.get(armyBId);
   if (!statsA) return { error: `No stats available for army ${armyAId}. Ensure sheet is configured.` };
   if (!statsB) return { error: `No stats available for army ${armyBId}. Ensure sheet is configured.` };
+
+  if (statsA.hex_q !== statsB.hex_q || statsA.hex_r !== statsB.hex_r) {
+    return { error: `Armies are not in the same hex.` };
+  }
 
   const attackerIsA = attackerId === armyAId;
   const attackerIsB = attackerId === armyBId;
@@ -208,7 +209,7 @@ export function resolveBattle(
     attackerPenalty,
     captureRoll,
     loserCaptured,
-    hexQ: armyA.hex_q,
-    hexR: armyA.hex_r,
+    hexQ: statsA.hex_q,
+    hexR: statsA.hex_r,
   };
 }

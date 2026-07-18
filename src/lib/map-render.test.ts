@@ -44,7 +44,7 @@ describe('getArmiesForMap', () => {
 
   it('returns empty array when no armies', () => {
     const db = makeDb();
-    expect(getArmiesForMap(db)).toEqual([]);
+    expect(getArmiesForMap(db, new Map())).toEqual([]);
   });
 
   it('returns army position, name, and faction color', () => {
@@ -60,14 +60,11 @@ describe('getArmiesForMap', () => {
       factionId,
     );
     const commanderId = (db.prepare(`SELECT id FROM commanders WHERE discord_user_id = 'user-1'`).get() as { id: number }).id;
-    db.prepare(`INSERT INTO armies (commander_id, name, hex_q, hex_r) VALUES (?, ?, ?, ?)`).run(
-      commanderId,
-      'Orange 1st',
-      3,
-      5,
-    );
+    db.prepare(`INSERT INTO armies (commander_id, name) VALUES (?, ?)`).run(commanderId, 'Orange 1st');
+    const armyId = (db.prepare(`SELECT id FROM armies WHERE commander_id = ?`).get(commanderId) as { id: number }).id;
 
-    const result = getArmiesForMap(db);
+    const statsMap = new Map([[armyId, { hex_q: 3, hex_r: 5 }]]);
+    const result = getArmiesForMap(db, statsMap);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       hex_q: 3,
@@ -81,16 +78,23 @@ describe('getArmiesForMap', () => {
     const db = makeDb();
     db.prepare(`INSERT INTO commanders (discord_user_id) VALUES (?)`).run('user-2');
     const commanderId = (db.prepare(`SELECT id FROM commanders WHERE discord_user_id = 'user-2'`).get() as { id: number }).id;
-    db.prepare(`INSERT INTO armies (commander_id, name, hex_q, hex_r) VALUES (?, ?, ?, ?)`).run(
-      commanderId,
-      'Solo Army',
-      1,
-      2,
-    );
+    db.prepare(`INSERT INTO armies (commander_id, name) VALUES (?, ?)`).run(commanderId, 'Solo Army');
+    const armyId = (db.prepare(`SELECT id FROM armies WHERE commander_id = ?`).get(commanderId) as { id: number }).id;
 
-    const result = getArmiesForMap(db);
+    const statsMap = new Map([[armyId, { hex_q: 1, hex_r: 2 }]]);
+    const result = getArmiesForMap(db, statsMap);
     expect(result).toHaveLength(1);
     expect(result[0].faction_color).toBeNull();
+  });
+
+  it('excludes armies with no stats entry (position unknown)', () => {
+    const db = makeDb();
+    db.prepare(`INSERT INTO commanders (discord_user_id) VALUES (?)`).run('user-3');
+    const commanderId = (db.prepare(`SELECT id FROM commanders WHERE discord_user_id = 'user-3'`).get() as { id: number }).id;
+    db.prepare(`INSERT INTO armies (commander_id, name) VALUES (?, ?)`).run(commanderId, 'Ghost Army');
+
+    const result = getArmiesForMap(db, new Map());
+    expect(result).toHaveLength(0);
   });
 });
 

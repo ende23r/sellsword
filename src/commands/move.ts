@@ -48,29 +48,34 @@ const move: Command = {
       return;
     }
 
-    if (destQ === army.hex_q && destR === army.hex_r) {
+    const commander = getCommanderByDiscordId(interaction.user.id);
+    const sheetId = extractSheetId(commander?.army_sheet_url);
+    if (!sheetId) {
+      await interaction.reply({
+        content: 'Your army has no sheet configured.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await interaction.deferReply();
+    const armyStats = await fetchArmyStats(sheetId);
+
+    if (destQ === armyStats.hex_q && destR === armyStats.hex_r) {
       db.prepare(
         "DELETE FROM orders WHERE army_id = ? AND type IN ('move', 'forage') AND processed_at IS NULL",
       ).run(army.id);
-      await interaction.reply(
-        `🛑 That's your current position. Movement orders cancelled — army will hold at **(${army.hex_q},${army.hex_r})**.`,
+      await interaction.editReply(
+        `🛑 That's your current position. Movement orders cancelled — army will hold at **(${armyStats.hex_q},${armyStats.hex_r})**.`,
       );
       return;
     }
 
-    if (!roadsOnly) {
-      const commander = getCommanderByDiscordId(interaction.user.id);
-      const sheetId = extractSheetId(commander?.army_sheet_url);
-      if (sheetId) {
-        await interaction.deferReply();
-        const armyStats = await fetchArmyStats(sheetId);
-        if (armyStats.wagons > 0) {
-          await interaction.editReply(
-            '⚠️ Armies with wagons cannot travel off-road. Use `roads_only: true` or detach your wagons first.',
-          );
-          return;
-        }
-      }
+    if (!roadsOnly && armyStats.wagons > 0) {
+      await interaction.editReply(
+        '⚠️ Armies with wagons cannot travel off-road. Use `roads_only: true` or detach your wagons first.',
+      );
+      return;
     }
 
     // One live order at a time: cancel any existing move or forage order
@@ -84,18 +89,14 @@ const move: Command = {
     );
 
     const dist = Math.round(
-      (Math.abs(army.hex_q - destQ) +
-        Math.abs(army.hex_q + army.hex_r - destQ - destR) +
-        Math.abs(army.hex_r - destR)) /
+      (Math.abs(armyStats.hex_q - destQ) +
+        Math.abs(armyStats.hex_q + armyStats.hex_r - destQ - destR) +
+        Math.abs(armyStats.hex_r - destR)) /
         2,
     );
-    const msg = `✅ Move order queued: **(${army.hex_q},${army.hex_r}) → (${destQ},${destR})** (${dist} hex${dist !== 1 ? 'es' : ''} away) — army will advance each night tick until it arrives.\nTerrain: **${destHex.terrain}**${roadsOnly ? ' · roads only' : ''}`;
-
-    if (interaction.deferred) {
-      await interaction.editReply(msg);
-    } else {
-      await interaction.reply(msg);
-    }
+    await interaction.editReply(
+      `✅ Move order queued: **(${armyStats.hex_q},${armyStats.hex_r}) → (${destQ},${destR})** (${dist} hex${dist !== 1 ? 'es' : ''} away) — army will advance each night tick until it arrives.\nTerrain: **${destHex.terrain}**${roadsOnly ? ' · roads only' : ''}`,
+    );
   },
 };
 

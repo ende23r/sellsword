@@ -11,15 +11,25 @@ export type ArmyMarker = {
   faction_color: string | null;
 };
 
-export function getArmiesForMap(db: Database.Database): ArmyMarker[] {
-  return db
+export function getArmiesForMap(
+  db: Database.Database,
+  statsMap: Map<number, { hex_q: number; hex_r: number }>,
+): ArmyMarker[] {
+  const rows = db
     .prepare(
-      `SELECT a.hex_q, a.hex_r, a.name, f.color AS faction_color
+      `SELECT a.id, a.name, f.color AS faction_color
        FROM armies a
        JOIN commanders c ON c.id = a.commander_id
        LEFT JOIN factions f ON f.id = c.faction_id`,
     )
-    .all() as ArmyMarker[];
+    .all() as { id: number; name: string | null; faction_color: string | null }[];
+
+  return rows
+    .filter((row) => statsMap.has(row.id))
+    .map((row) => {
+      const s = statsMap.get(row.id)!;
+      return { hex_q: s.hex_q, hex_r: s.hex_r, name: row.name, faction_color: row.faction_color };
+    });
 }
 
 export function armyInitials(name: string | null): string {

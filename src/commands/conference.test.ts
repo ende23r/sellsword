@@ -1,17 +1,35 @@
 import { ChannelType } from 'discord.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockFetchArmyStats = vi.hoisted(() => vi.fn());
+const mockExtractSheetId = vi.hoisted(() => vi.fn());
+
+vi.mock('../lib/sheets.js', () => ({
+  fetchArmyStats: mockFetchArmyStats,
+  extractSheetId: mockExtractSheetId,
+}));
+
 const mockSaveConferenceChannel = vi.hoisted(() => vi.fn());
 const mockGetConferenceChannelForHex = vi.hoisted(() => vi.fn().mockReturnValue(null));
-const mockGetArmiesAtHex = vi.hoisted(() => vi.fn());
 const mockGetArmyByDiscordId = vi.hoisted(() => vi.fn());
 const mockGetCommanderByArmyId = vi.hoisted(() => vi.fn());
 const mockGetStrongholdAtHex = vi.hoisted(() => vi.fn().mockReturnValue(null));
 
+// Army rows returned by the bulk query (all armies with their sheet URLs)
+const allArmiesRows = [
+  { id: 1, army_sheet_url: 'https://docs.google.com/spreadsheets/d/sheet-1' },
+  { id: 2, army_sheet_url: 'https://docs.google.com/spreadsheets/d/sheet-2' },
+];
+
 vi.mock('../lib/db.js', () => ({
-  default: {},
+  default: {
+    prepare: vi.fn((sql: string) => {
+      if (sql.includes('FROM armies a JOIN commanders')) return { all: vi.fn().mockReturnValue(allArmiesRows) };
+      if (sql.includes('FROM armies WHERE id')) return { get: vi.fn().mockImplementation((id: number) => ({ name: id === 1 ? 'Iron Legion' : 'Black Company' })) };
+      return { get: vi.fn(), run: vi.fn() };
+    }),
+  },
   getArmyByDiscordId: mockGetArmyByDiscordId,
-  getArmiesAtHex: mockGetArmiesAtHex,
   getCommanderByArmyId: mockGetCommanderByArmyId,
   getStrongholdAtHex: mockGetStrongholdAtHex,
   getConferenceChannelForHex: mockGetConferenceChannelForHex,
@@ -58,16 +76,21 @@ const fakeChannel = {
 describe('/conference', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetArmyByDiscordId.mockReturnValue({ id: 1, hex_q: 3, hex_r: 5 });
-    mockGetArmiesAtHex.mockReturnValue([
-      { id: 1, name: 'Iron Legion' },
-      { id: 2, name: 'Black Company' },
-    ]);
+    mockGetArmyByDiscordId.mockReturnValue({ id: 1 });
     mockGetCommanderByArmyId.mockImplementation((id: number) => ({
       id,
       discord_user_id: `user-${id}`,
     }));
     mockChannelCreate.mockResolvedValue(fakeChannel);
+    mockExtractSheetId.mockImplementation((url: string | null) => {
+      if (!url) return null;
+      const match = url.match(/\/d\/([^/]+)/);
+      return match?.[1] ?? null;
+    });
+    // Both armies at (3,5)
+    mockFetchArmyStats.mockImplementation((sheetId: string) =>
+      Promise.resolve({ hex_q: 3, hex_r: 5 }),
+    );
   });
 
   it('replies with error when not in a guild', async () => {

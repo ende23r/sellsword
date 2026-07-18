@@ -1,5 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import db from '../lib/db.js';
+import { extractSheetId, fetchArmyStats, syncArmySheet } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const teleport: Command = {
@@ -27,8 +28,12 @@ const teleport: Command = {
     const r = interaction.options.getInteger('r', true);
 
     const army = db
-      .prepare('SELECT * FROM armies WHERE id = ?')
-      .get(armyId) as { id: number; name: string | null } | undefined;
+      .prepare(
+        `SELECT a.id, a.name, c.army_sheet_url
+         FROM armies a JOIN commanders c ON c.id = a.commander_id
+         WHERE a.id = ?`,
+      )
+      .get(armyId) as { id: number; name: string | null; army_sheet_url: string | null } | undefined;
 
     if (!army) {
       await interaction.editReply(`No army with ID ${armyId}.`);
@@ -44,7 +49,16 @@ const teleport: Command = {
       return;
     }
 
-    db.prepare('UPDATE armies SET hex_q = ?, hex_r = ? WHERE id = ?').run(q, r, armyId);
+    const sheetId = extractSheetId(army.army_sheet_url);
+    if (!sheetId) {
+      await interaction.editReply(`Army ${armyId} has no sheet configured — cannot update position.`);
+      return;
+    }
+
+    const stats = await fetchArmyStats(sheetId);
+    stats.hex_q = q;
+    stats.hex_r = r;
+    await syncArmySheet(sheetId, stats);
 
     await interaction.editReply(
       `✅ **${army.name ?? army.id}** teleported to (${q},${r}).`,

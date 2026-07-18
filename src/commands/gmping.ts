@@ -21,7 +21,7 @@ const gmping: Command = {
 
     const row = db
       .prepare(
-        `SELECT a.name AS army_name, a.hex_q, a.hex_r, f.name AS faction_name
+        `SELECT a.name AS army_name, f.name AS faction_name
          FROM commanders c
          LEFT JOIN armies a ON a.commander_id = c.id
          LEFT JOIN factions f ON f.id = c.faction_id
@@ -29,8 +29,6 @@ const gmping: Command = {
       )
       .get(interaction.user.id) as {
       army_name: string | null;
-      hex_q: number | null;
-      hex_r: number | null;
       faction_name: string | null;
     } | null;
 
@@ -41,7 +39,7 @@ const gmping: Command = {
       const parts: string[] = [];
       if (row.faction_name) parts.push(`**Faction:** ${row.faction_name}`);
       if (row.army_name) {
-        parts.push(`**Army:** ${row.army_name} @ (${row.hex_q},${row.hex_r})`);
+        parts.push(`**Army:** ${row.army_name}`);
       } else {
         parts.push('_(no army)_');
       }

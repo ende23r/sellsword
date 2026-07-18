@@ -13,15 +13,10 @@ function makeDb() {
 
 let seq = 0;
 
-function seedArmy(
-  db: Database.Database,
-  overrides: { id?: number; hex_q?: number; hex_r?: number } = {},
-): number {
+function seedArmy(db: Database.Database, overrides: { id?: number } = {}): number {
   const id = overrides.id ?? ++seq;
   db.prepare('INSERT INTO commanders (id, discord_user_id) VALUES (?, ?)').run(id, `user-${id}`);
-  db.prepare('INSERT INTO armies (id, commander_id, hex_q, hex_r) VALUES (?, ?, ?, ?)').run(
-    id, id, overrides.hex_q ?? 0, overrides.hex_r ?? 0,
-  );
+  db.prepare('INSERT INTO armies (id, commander_id) VALUES (?, ?)').run(id, id);
   return id;
 }
 
@@ -40,6 +35,8 @@ function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
     supplies: 10000,
     coin: 0,
     goods: 0,
+    hex_q: 0,
+    hex_r: 0,
     stance: 'allow_passage',
     forced_march: false,
     night_march: false,
@@ -100,9 +97,12 @@ describe('resolveBattle', () => {
   });
 
   it('returns an error when armies are not in the same hex', () => {
-    const a = seedArmy(db, { hex_q: 0, hex_r: 0 });
-    const b = seedArmy(db, { hex_q: 1, hex_r: 0 });
-    const stats = new Map([[a, makeStats()], [b, makeStats()]]);
+    const a = seedArmy(db);
+    const b = seedArmy(db);
+    const stats = new Map([
+      [a, makeStats({ hex_q: 0, hex_r: 0 })],
+      [b, makeStats({ hex_q: 1, hex_r: 0 })],
+    ]);
     const result = resolveBattle(db, a, b, stats, null);
     expect(result).toEqual({ error: expect.stringContaining('same hex') });
   });
@@ -337,9 +337,12 @@ describe('resolveBattle', () => {
   });
 
   it('returns hex coordinates in the result', () => {
-    const a = seedArmy(db, { hex_q: 3, hex_r: -2 });
-    const b = seedArmy(db, { hex_q: 3, hex_r: -2 });
-    const stats = new Map([[a, makeStats()], [b, makeStats()]]);
+    const a = seedArmy(db);
+    const b = seedArmy(db);
+    const stats = new Map([
+      [a, makeStats({ hex_q: 3, hex_r: -2 })],
+      [b, makeStats({ hex_q: 3, hex_r: -2 })],
+    ]);
     const result = resolveBattle(db, a, b, stats, null, seqRng(0.5, 0.5, 0.5, 0.5)) as any;
     expect(result.hexQ).toBe(3);
     expect(result.hexR).toBe(-2);

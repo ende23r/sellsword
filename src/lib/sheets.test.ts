@@ -41,6 +41,8 @@ describe('parseSheetStats', () => {
       supplies: 5000,
       coin: 100,
       goods: 20,
+      hex_q: 0,
+      hex_r: 0,
       stance: 'allow_passage',
       infantry_strength: 900,
       cavalry_strength: 400,
@@ -69,6 +71,8 @@ describe('parseSheetStats', () => {
       supplies: 0,
       coin: 0,
       goods: 0,
+      hex_q: 0,
+      hex_r: 0,
       stance: 'allow_passage',
       infantry_strength: 0,
       cavalry_strength: 0,
@@ -77,6 +81,24 @@ describe('parseSheetStats', () => {
       forced_march: false,
       night_march: false,
     });
+  });
+
+  it('parses hex_q and hex_r from the hex cell (format "q,r")', () => {
+    const stats = parseSheetStats(makeRows({ 9: '3,-2' }));
+    expect(stats.hex_q).toBe(3);
+    expect(stats.hex_r).toBe(-2);
+  });
+
+  it('parses negative hex_q coordinate', () => {
+    const stats = parseSheetStats(makeRows({ 9: '-5,3' }));
+    expect(stats.hex_q).toBe(-5);
+    expect(stats.hex_r).toBe(3);
+  });
+
+  it('defaults hex_q and hex_r to 0 when hex cell is missing', () => {
+    const stats = parseSheetStats(makeRows({ 9: null }));
+    expect(stats.hex_q).toBe(0);
+    expect(stats.hex_r).toBe(0);
   });
 
   it('defaults numeric fields to 0 when cells are empty', () => {

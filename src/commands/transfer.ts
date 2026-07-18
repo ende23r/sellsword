@@ -1,5 +1,5 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
-import db, { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
+import { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
 import { extractSheetId, fetchArmyStats, syncArmySheet } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
@@ -49,14 +49,6 @@ const transfer: Command = {
       return;
     }
 
-    if (sender.hex_q !== recipient.hex_q || sender.hex_r !== recipient.hex_r) {
-      await interaction.reply({
-        content: `Your army is at (${sender.hex_q},${sender.hex_r}) and theirs is at (${recipient.hex_q},${recipient.hex_r}). Armies must be in the same hex to transfer.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
     const senderCommander = getCommanderByDiscordId(interaction.user.id);
     const recipientCommander = getCommanderByDiscordId(recipientUser.id);
     const senderSheetId = extractSheetId(senderCommander?.army_sheet_url);
@@ -81,6 +73,13 @@ const transfer: Command = {
       fetchArmyStats(recipientSheetId),
     ]);
 
+    if (senderStats.hex_q !== recipientStats.hex_q || senderStats.hex_r !== recipientStats.hex_r) {
+      await interaction.editReply(
+        `Your army is at (${senderStats.hex_q},${senderStats.hex_r}) and theirs is at (${recipientStats.hex_q},${recipientStats.hex_r}). Armies must be in the same hex to transfer.`,
+      );
+      return;
+    }
+
     if (senderStats[resource] < amount) {
       await interaction.editReply(
         `You only have ${senderStats[resource].toLocaleString()} ${resource} — cannot transfer ${amount.toLocaleString()}.`,
@@ -91,13 +90,9 @@ const transfer: Command = {
     senderStats[resource] -= amount;
     recipientStats[resource] += amount;
 
-    // Look up hex positions from DB for the sheet sync (hex is display-only in Sheets)
-    const senderHex = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(sender.id) as { hex_q: number; hex_r: number };
-    const recipientHex = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(recipient.id) as { hex_q: number; hex_r: number };
-
     await Promise.all([
-      syncArmySheet(senderSheetId, senderStats, senderHex.hex_q, senderHex.hex_r),
-      syncArmySheet(recipientSheetId, recipientStats, recipientHex.hex_q, recipientHex.hex_r),
+      syncArmySheet(senderSheetId, senderStats),
+      syncArmySheet(recipientSheetId, recipientStats),
     ]);
 
     await interaction.editReply(

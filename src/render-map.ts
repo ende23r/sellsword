@@ -14,7 +14,7 @@ if (hexes.length === 0) {
 }
 
 const png = await renderMap(hexes, getAllStrongholds(), {
-  armyPositions: getArmiesForMap(db),
+  armyPositions: getArmiesForMap(db, new Map()),
   hexSize: 128,
 });
 

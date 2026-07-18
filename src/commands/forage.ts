@@ -16,12 +16,6 @@ const forage: Command = {
       return;
     }
 
-    const currentHex = getHex(army.hex_q, army.hex_r);
-    if (!currentHex) {
-      await interaction.reply({ content: 'Your army is on an unknown hex.', flags: MessageFlags.Ephemeral });
-      return;
-    }
-
     const commander = getCommanderByDiscordId(interaction.user.id);
     const sheetId = extractSheetId(commander?.army_sheet_url);
     if (!sheetId) {
@@ -32,8 +26,14 @@ const forage: Command = {
     await interaction.deferReply();
 
     const armyStats = await fetchArmyStats(sheetId);
+    const currentHex = getHex(armyStats.hex_q, armyStats.hex_r);
+    if (!currentHex) {
+      await interaction.editReply('Your army is on an unknown hex.');
+      return;
+    }
+
     const range = armyStats.scouting_range;
-    const coords = hexesInRange({ q: army.hex_q, r: army.hex_r }, range);
+    const coords = hexesInRange({ q: armyStats.hex_q, r: armyStats.hex_r }, range);
 
     let totalYield = 0;
     let exhaustedCount = 0;
@@ -62,7 +62,7 @@ const forage: Command = {
     const rangeLabel = range > 1 ? `${range}-hex scouting range (${coords.length} hexes)` : `1-hex range (${coords.length} hexes)`;
     const msg =
       `✅ Forage order queued for the next night update.\n` +
-      `**Area:** ${rangeLabel} around (${army.hex_q},${army.hex_r})\n` +
+      `**Area:** ${rangeLabel} around (${armyStats.hex_q},${armyStats.hex_r})\n` +
       `**Potential yield:** ${totalYield.toLocaleString()} supplies` +
       (exhaustedCount > 0 ? ` (${exhaustedCount} exhausted hex${exhaustedCount > 1 ? 'es' : ''} skipped)` : '');
 

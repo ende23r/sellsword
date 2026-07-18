@@ -26,8 +26,6 @@ function seedArmy(
   overrides: {
     id?: number;
     name?: string;
-    hex_q?: number;
-    hex_r?: number;
     faction_id?: number;
   } = {},
 ): number {
@@ -37,14 +35,10 @@ function seedArmy(
     `user-${id}`,
     overrides.faction_id ?? null,
   );
-  db.prepare(
-    `INSERT INTO armies (id, commander_id, name, hex_q, hex_r) VALUES (?, ?, ?, ?, ?)`,
-  ).run(
+  db.prepare(`INSERT INTO armies (id, commander_id, name) VALUES (?, ?, ?)`).run(
     id,
     id,
     overrides.name ?? `Army ${id}`,
-    overrides.hex_q ?? 0,
-    overrides.hex_r ?? 0,
   );
   return id;
 }
@@ -64,6 +58,8 @@ function makeStats(overrides: Partial<ArmySheetStats> = {}): ArmySheetStats {
     supplies: 10000,
     coin: 0,
     goods: 0,
+    hex_q: 0,
+    hex_r: 0,
     stance: 'allow_passage',
     forced_march: false,
     night_march: false,
@@ -162,7 +158,7 @@ describe('processForage', () => {
   });
 
   it('forages current hex and all 6 adjacent hexes', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0, scouting_range: 1 })]]);
     // Center + 6 neighbors = 7 hexes
     for (const [q, r] of [
@@ -184,7 +180,7 @@ describe('processForage', () => {
   });
 
   it('skips exhausted hexes', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 5 });
     seedOrder(db, armyId, 'forage');
@@ -195,7 +191,7 @@ describe('processForage', () => {
   });
 
   it('skips armies in the moving set', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100 });
     seedOrder(db, armyId, 'forage');
@@ -206,7 +202,7 @@ describe('processForage', () => {
   });
 
   it('extends range to 2 hexes when scouting_range is 2', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats({ infantry: 0, supplies: 0, scouting_range: 2 })]]);
     seedHex(db, 0, 0, { settlement: 10 }); // range 0
     seedHex(db, 0, 2, { settlement: 10 }); // range 2 (NW twice)
@@ -220,7 +216,7 @@ describe('processForage', () => {
   });
 
   it('increments forage_count on each foraged hex', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 0 });
     seedOrder(db, armyId, 'forage');
@@ -234,7 +230,7 @@ describe('processForage', () => {
   });
 
   it('logs revolt risk when any foraged hex has been foraged before', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 1 });
     seedOrder(db, armyId, 'forage');
@@ -246,7 +242,7 @@ describe('processForage', () => {
   });
 
   it('does not log revolt risk when all foraged hexes are fresh', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats({ infantry: 0 })]]);
     seedHex(db, 0, 0, { settlement: 100, forage_count: 0 });
     seedOrder(db, armyId, 'forage');
@@ -269,7 +265,7 @@ describe('processMovement', () => {
   });
 
   it('moves army to adjacent destination and marks order processed', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
@@ -278,12 +274,8 @@ describe('processMovement', () => {
     const moved = processMovement(db, stats, []);
     expect(moved.has(armyId)).toBe(true);
 
-    const army = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(armyId) as {
-      hex_q: number;
-      hex_r: number;
-    };
-    expect(army.hex_q).toBe(0);
-    expect(army.hex_r).toBe(1);
+    expect(stats.get(armyId)!.hex_q).toBe(0);
+    expect(stats.get(armyId)!.hex_r).toBe(1);
 
     const order = db.prepare('SELECT processed_at FROM orders WHERE army_id = ?').get(armyId) as {
       processed_at: string | null;
@@ -292,7 +284,7 @@ describe('processMovement', () => {
   });
 
   it('advances 1 hex per tick off-road, leaving order pending', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
@@ -302,10 +294,7 @@ describe('processMovement', () => {
 
     processMovement(db, stats, []);
 
-    const army = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(armyId) as {
-      hex_r: number;
-    };
-    expect(army.hex_r).toBe(1); // 1 hex off-road
+    expect(stats.get(armyId)!.hex_r).toBe(1); // 1 hex off-road
 
     const order = db.prepare('SELECT processed_at FROM orders WHERE army_id = ?').get(armyId) as {
       processed_at: string | null;
@@ -314,7 +303,7 @@ describe('processMovement', () => {
   });
 
   it('advances 2 hexes per tick on road', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
@@ -324,14 +313,11 @@ describe('processMovement', () => {
 
     processMovement(db, stats, []);
 
-    const army = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(armyId) as {
-      hex_r: number;
-    };
-    expect(army.hex_r).toBe(2); // 2 hexes on road
+    expect(stats.get(armyId)!.hex_r).toBe(2); // 2 hexes on road
   });
 
   it('cannot path through a speed=0 hex', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);                    // passable
     seedHex(db, 0, 1, { speed: 0 });      // impassable — only route to (0,2)
@@ -341,14 +327,13 @@ describe('processMovement', () => {
     const log: string[] = [];
     processMovement(db, stats, log);
 
-    const army = db.prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?').get(armyId) as { hex_q: number; hex_r: number };
-    expect(army.hex_q).toBe(0);
-    expect(army.hex_r).toBe(0);
+    expect(stats.get(armyId)!.hex_q).toBe(0);
+    expect(stats.get(armyId)!.hex_r).toBe(0);
     expect(log.some((l) => l.includes('no valid path'))).toBe(true);
   });
 
   it('off-road movement distance is determined by current hex speed', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0, { speed: 12 }); // double speed — should move 2 hexes off-road
     seedHex(db, 0, 1, { speed: 12 });
@@ -358,12 +343,11 @@ describe('processMovement', () => {
 
     processMovement(db, stats, []);
 
-    const army = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(armyId) as { hex_r: number };
-    expect(army.hex_r).toBe(2);
+    expect(stats.get(armyId)!.hex_r).toBe(2);
   });
 
   it('cancels order and logs warning when no valid path exists', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedOrder(db, armyId, 'move', { dest_q: 9, dest_r: 9, roads_only: false });
@@ -385,7 +369,7 @@ describe('processMovement', () => {
   });
 
   it('does not include army in moved set when path fails', () => {
-    const armyId = seedArmy(db, { hex_q: 0, hex_r: 0 });
+    const armyId = seedArmy(db);
     const stats = new Map([[armyId, makeStats()]]);
     seedHex(db, 0, 0);
     seedOrder(db, armyId, 'move', { dest_q: 9, dest_r: 9, roads_only: false });
@@ -398,73 +382,70 @@ describe('processMovement', () => {
     // Army A (faction 1) moving from (0,0) to (0,2); Army B (faction 2) is at (0,1) in engage stance
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
-    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
-    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2 });
+    const aId = seedArmy(db, { faction_id: 1 });
+    const bId = seedArmy(db, { faction_id: 2 });
     seedHex(db, 0, 0, { speed: 12 }); // speed 12 → 2 hexes/tick off-road, so A would reach (0,2)
     seedHex(db, 0, 1, { speed: 12 });
     seedHex(db, 0, 2, { speed: 12 });
     seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
     const stats = new Map([
-      [aId, makeStats()],
-      [bId, makeStats({ stance: 'engage' })],
+      [aId, makeStats({ hex_q: 0, hex_r: 0 })],
+      [bId, makeStats({ stance: 'engage', hex_q: 0, hex_r: 1 })],
     ]);
 
     processMovement(db, stats, []);
 
-    const pos = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(aId) as { hex_r: number };
-    expect(pos.hex_r).toBe(1); // stopped at (0,1), not (0,2)
+    expect(stats.get(aId)!.hex_r).toBe(1); // stopped at (0,1), not (0,2)
   });
 
   it('does not stop a moving army when the occupying army is in allow_passage stance', () => {
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
-    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
-    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2 });
+    const aId = seedArmy(db, { faction_id: 1 });
+    const bId = seedArmy(db, { faction_id: 2 });
     seedHex(db, 0, 0, { speed: 12 });
     seedHex(db, 0, 1, { speed: 12 });
     seedHex(db, 0, 2, { speed: 12 });
     seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
     const stats = new Map([
-      [aId, makeStats()],
-      [bId, makeStats({ stance: 'allow_passage' })],
+      [aId, makeStats({ hex_q: 0, hex_r: 0 })],
+      [bId, makeStats({ stance: 'allow_passage', hex_q: 0, hex_r: 1 })],
     ]);
 
     processMovement(db, stats, []);
 
-    const pos = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(aId) as { hex_r: number };
-    expect(pos.hex_r).toBe(2); // passed through to destination
+    expect(stats.get(aId)!.hex_r).toBe(2); // passed through to destination
   });
 
   it('does not stop a moving army when the engaging army is the same faction', () => {
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
-    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
-    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 1 });
+    const aId = seedArmy(db, { faction_id: 1 });
+    const bId = seedArmy(db, { faction_id: 1 });
     seedHex(db, 0, 0, { speed: 12 });
     seedHex(db, 0, 1, { speed: 12 });
     seedHex(db, 0, 2, { speed: 12 });
     seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 2, roads_only: false });
     const stats = new Map([
-      [aId, makeStats()],
-      [bId, makeStats({ stance: 'engage' })],
+      [aId, makeStats({ hex_q: 0, hex_r: 0 })],
+      [bId, makeStats({ stance: 'engage', hex_q: 0, hex_r: 1 })],
     ]);
 
     processMovement(db, stats, []);
 
-    const pos = db.prepare('SELECT hex_r FROM armies WHERE id = ?').get(aId) as { hex_r: number };
-    expect(pos.hex_r).toBe(2); // ally — not blocked
+    expect(stats.get(aId)!.hex_r).toBe(2); // ally — not blocked
   });
 
   it('logs an engage notification when enemy armies with engage stance share a hex', () => {
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
-    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1, name: 'Iron Legion' });
-    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2, name: 'Black Company' });
+    const aId = seedArmy(db, { faction_id: 1, name: 'Iron Legion' });
+    const bId = seedArmy(db, { faction_id: 2, name: 'Black Company' });
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
     seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 1, roads_only: false });
     const stats = new Map([
-      [aId, makeStats()],
-      [bId, makeStats({ stance: 'engage' })],
+      [aId, makeStats({ hex_q: 0, hex_r: 0 })],
+      [bId, makeStats({ stance: 'engage', hex_q: 0, hex_r: 1 })],
     ]);
 
     const log: string[] = [];
@@ -477,14 +458,14 @@ describe('processMovement', () => {
   it('does not log a collision when all armies in a hex are allow_passage', () => {
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(1, 'Red', 'r1');
     db.prepare('INSERT INTO factions (id, name, discord_role_id) VALUES (?, ?, ?)').run(2, 'Blue', 'r2');
-    const aId = seedArmy(db, { hex_q: 0, hex_r: 0, faction_id: 1 });
-    const bId = seedArmy(db, { hex_q: 0, hex_r: 1, faction_id: 2 });
+    const aId = seedArmy(db, { faction_id: 1 });
+    const bId = seedArmy(db, { faction_id: 2 });
     seedHex(db, 0, 0);
     seedHex(db, 0, 1);
     seedOrder(db, aId, 'move', { dest_q: 0, dest_r: 1, roads_only: false });
     const stats = new Map([
-      [aId, makeStats()],
-      [bId, makeStats({ stance: 'allow_passage' })],
+      [aId, makeStats({ hex_q: 0, hex_r: 0 })],
+      [bId, makeStats({ stance: 'allow_passage', hex_q: 0, hex_r: 1 })],
     ]);
 
     const log: string[] = [];

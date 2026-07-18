@@ -2,7 +2,7 @@ import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import db, { getArmyByDiscordId, getCommanderByDiscordId } from '../lib/db.js';
 import { computeDeliveryTick, hexDistance } from '../lib/hex.js';
 import { notifyAdmin } from '../lib/admin-notify.js';
-import { logMessage } from '../lib/sheets.js';
+import { extractSheetId, fetchArmyStats, logMessage } from '../lib/sheets.js';
 import type { Command } from '../types.js';
 
 const message: Command = {
@@ -44,12 +44,29 @@ const message: Command = {
       return;
     }
 
+    const senderSheetId = extractSheetId(senderCommander.army_sheet_url);
+    const recipientSheetId = extractSheetId(recipientCommander.army_sheet_url);
+
+    await interaction.deferReply();
+
     const content = interaction.options.getString('content', true);
 
-    const dist = hexDistance(
-      { q: senderArmy.hex_q, r: senderArmy.hex_r },
-      { q: recipientArmy.hex_q, r: recipientArmy.hex_r },
-    );
+    let dist = 0;
+    if (senderSheetId && recipientSheetId) {
+      try {
+        const [senderStats, recipientStats] = await Promise.all([
+          fetchArmyStats(senderSheetId),
+          fetchArmyStats(recipientSheetId),
+        ]);
+        dist = hexDistance(
+          { q: senderStats.hex_q, r: senderStats.hex_r },
+          { q: recipientStats.hex_q, r: recipientStats.hex_r },
+        );
+      } catch {
+        // Non-fatal: fall back to 0-distance delivery
+      }
+    }
+
     const deliverAt = computeDeliveryTick(dist, new Date()).toISOString();
 
     const { lastInsertRowid } = db.prepare(
@@ -80,9 +97,9 @@ const message: Command = {
     );
 
     const deliveryTs = Math.floor(new Date(deliverAt).getTime() / 1000);
-    await interaction.reply({
-      content: `✅ Message dispatched.\n**Recipient:** ${recipientUser}\n**Distance:** ${dist} hexes (${dist * 6} miles)\n**Estimated delivery:** <t:${deliveryTs}:f> (<t:${deliveryTs}:R>)`,
-    });
+    await interaction.editReply(
+      `✅ Message dispatched.\n**Recipient:** ${recipientUser}\n**Distance:** ${dist} hexes (${dist * 6} miles)\n**Estimated delivery:** <t:${deliveryTs}:f> (<t:${deliveryTs}:R>)`,
+    );
   },
 };
 

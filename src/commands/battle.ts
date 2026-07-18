@@ -106,13 +106,10 @@ const battle: Command = {
 
     // Write updated stats back to both sheets
     for (const [armyId, sheetId] of [[armyAId, resultA.sheetId], [armyBId, resultB.sheetId]] as [number, string][]) {
-      const armyRow = db
-        .prepare('SELECT hex_q, hex_r FROM armies WHERE id = ?')
-        .get(armyId) as { hex_q: number; hex_r: number } | undefined;
       const stats = statsMap.get(armyId);
-      if (armyRow && stats) {
+      if (stats) {
         try {
-          await syncArmySheet(sheetId, stats, armyRow.hex_q, armyRow.hex_r);
+          await syncArmySheet(sheetId, stats);
         } catch {
           // Non-fatal: battle result is logged even if sheet sync fails
         }

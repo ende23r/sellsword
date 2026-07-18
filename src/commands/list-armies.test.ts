@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../lib/db.js', () => {
   const stmt = {
     all: vi.fn().mockReturnValue([
-      { id: 1, name: 'Iron Legion', hex_q: 2, hex_r: 3, discord_user_id: 'user-1' },
-      { id: 2, name: 'Golden Horde', hex_q: -1, hex_r: 4, discord_user_id: 'user-2' },
+      { id: 1, name: 'Iron Legion', discord_user_id: 'user-1' },
+      { id: 2, name: 'Golden Horde', discord_user_id: 'user-2' },
     ]),
   };
   return { default: { prepare: vi.fn().mockReturnValue(stmt) } };

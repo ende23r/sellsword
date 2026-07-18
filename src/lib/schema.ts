@@ -44,9 +44,7 @@ export const DB_SCHEMA = `
   CREATE TABLE IF NOT EXISTS armies (
     id              INTEGER PRIMARY KEY,
     commander_id    INTEGER NOT NULL UNIQUE REFERENCES commanders(id),
-    name            TEXT,
-    hex_q           INTEGER NOT NULL DEFAULT 0,
-    hex_r           INTEGER NOT NULL DEFAULT 0
+    name            TEXT
   );
 
   CREATE TABLE IF NOT EXISTS detachments (

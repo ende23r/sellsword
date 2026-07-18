@@ -1,13 +1,13 @@
 import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import type { GuildMember, TextChannel } from 'discord.js';
-import {
-  getArmiesAtHex,
+import db, {
   getArmyByDiscordId,
   getCommanderByArmyId,
   getConferenceChannelForHex,
   getStrongholdAtHex,
   saveConferenceChannel,
 } from '../lib/db.js';
+import { extractSheetId, fetchArmyStats } from '../lib/sheets.js';
 import { conferenceChannelName } from '../lib/conference-ops.js';
 import type { Command } from '../types.js';
 
@@ -30,13 +30,47 @@ const conference: Command = {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const { hex_q: q, hex_r: r } = army;
+    // Fetch all army stats to determine hex positions
+    const allArmiesRows = db
+      .prepare('SELECT a.id, c.army_sheet_url FROM armies a JOIN commanders c ON c.id = a.commander_id')
+      .all() as { id: number; army_sheet_url: string | null }[];
+
+    const statsMap = new Map<number, { hex_q: number; hex_r: number }>();
+    await Promise.all(
+      allArmiesRows.map(async (row) => {
+        const sheetId = extractSheetId(row.army_sheet_url);
+        if (!sheetId) return;
+        try {
+          const stats = await fetchArmyStats(sheetId);
+          statsMap.set(row.id, stats);
+        } catch {
+          // Skip armies whose sheets are unavailable
+        }
+      }),
+    );
+
+    const myStats = statsMap.get(army.id);
+    if (!myStats) {
+      await interaction.editReply('Your army position is not available (no sheet configured).');
+      return;
+    }
+
+    const q = myStats.hex_q;
+    const r = myStats.hex_r;
     const guild = interaction.guild;
 
     const stronghold = getStrongholdAtHex(q, r);
     const channelName = conferenceChannelName(q, r, stronghold?.name);
 
-    const armiesAtHex = getArmiesAtHex(q, r);
+    // Find all armies at this hex
+    const armiesAtHex: { id: number; name: string | null }[] = [];
+    for (const [id, s] of statsMap) {
+      if (s.hex_q === q && s.hex_r === r) {
+        const nameRow = db.prepare('SELECT name FROM armies WHERE id = ?').get(id) as { name: string | null } | undefined;
+        armiesAtHex.push({ id, name: nameRow?.name ?? null });
+      }
+    }
+
     const userIds = armiesAtHex
       .map((a) => getCommanderByArmyId(a.id)?.discord_user_id)
       .filter((id): id is string => !!id);

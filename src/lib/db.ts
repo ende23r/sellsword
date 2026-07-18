@@ -18,16 +18,17 @@ db.exec(DB_SCHEMA);
   }
 }
 
-// Migration: remove stat columns from armies (now in Google Sheets).
+// Migration: remove stat columns and hex columns from armies (now in Google Sheets).
 {
   const armiesCols = db.pragma('table_info(armies)') as { name: string }[];
   const names = new Set(armiesCols.map((c) => c.name));
-  const statCols = [
+  const removeCols = [
     'infantry', 'infantry_strength', 'cavalry', 'cavalry_strength',
     'wagons', 'noncombatants', 'scouting_range', 'morale', 'resting_morale',
     'max_morale', 'supplies', 'coin', 'goods', 'forced_march', 'night_march', 'stance',
+    'hex_q', 'hex_r',
   ];
-  for (const col of statCols) {
+  for (const col of removeCols) {
     if (names.has(col)) db.exec(`ALTER TABLE armies DROP COLUMN ${col}`);
   }
 }
@@ -94,8 +95,6 @@ export type ArmyRow = {
   id: number;
   commander_id: number;
   name: string | null;
-  hex_q: number;
-  hex_r: number;
 };
 
 export type FactionRow = {
@@ -176,10 +175,6 @@ export function getPendingOrders(type?: string): OrderRow[] {
 
 export function markOrderProcessed(orderId: number): void {
   db.prepare("UPDATE orders SET processed_at = datetime('now') WHERE id = ?").run(orderId);
-}
-
-export function getArmiesAtHex(q: number, r: number): ArmyRow[] {
-  return db.prepare('SELECT * FROM armies WHERE hex_q = ? AND hex_r = ?').all(q, r) as ArmyRow[];
 }
 
 export function getStrongholdAtHex(q: number, r: number): StrongholdRow | undefined {

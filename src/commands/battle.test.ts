@@ -44,7 +44,9 @@ const mockBattleOutcome = {
 const mockStats = {
   infantry: 1000, infantry_strength: 0, cavalry: 0, cavalry_strength: 0,
   wagons: 0, noncombatants: 0, scouting_range: 1, morale: 9, resting_morale: 9,
-  max_morale: 12, supplies: 10000, coin: 0, goods: 0, stance: 'allow_passage' as const,
+  max_morale: 12, supplies: 10000, coin: 0, goods: 0,
+  hex_q: 4, hex_r: -2,
+  stance: 'allow_passage' as const,
   forced_march: false, night_march: false,
 };
 
@@ -80,8 +82,6 @@ describe('/battle', () => {
       get: vi.fn().mockImplementation((id: number) => {
         if (sql.includes('army_sheet_url'))
           return { army_sheet_url: `https://docs.google.com/spreadsheets/d/sheet-${id}` };
-        if (sql.includes('hex_q'))
-          return { hex_q: 4, hex_r: -2 };
         if (sql.includes('discord_channel_id'))
           return { discord_channel_id: `ch-army-${id}` };
         return null;
@@ -189,8 +189,6 @@ describe('/battle', () => {
       get: vi.fn().mockImplementation((id: number) => {
         if (sql.includes('army_sheet_url'))
           return { army_sheet_url: `https://docs.google.com/spreadsheets/d/sheet-${id}` };
-        if (sql.includes('hex_q'))
-          return { hex_q: 4, hex_r: -2 };
         if (sql.includes('discord_channel_id'))
           return { discord_channel_id: null };
         return null;

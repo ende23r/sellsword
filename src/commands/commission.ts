@@ -100,8 +100,9 @@ const commission: Command = {
         stance: 'allow_passage',
         infantry_strength: 0, cavalry_strength: 0, scouting_range: 1,
         forced_march: false, night_march: false,
+        hex_q: startQ, hex_r: startR,
       };
-      await syncArmySheet(sheetId, defaultStats, startQ, startR);
+      await syncArmySheet(sheetId, defaultStats);
     }
 
     const factionId = upsertFaction(db, factionRole.name, factionRole.id, category.id);
@@ -121,10 +122,10 @@ const commission: Command = {
       .get(commanderUser.id) as { id: number };
 
     db.prepare(
-      `INSERT INTO armies (commander_id, name, hex_q, hex_r)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO armies (commander_id, name)
+       VALUES (?, ?)
        ON CONFLICT(commander_id) DO NOTHING`,
-    ).run(commander.id, armyName, startQ, startR);
+    ).run(commander.id, armyName);
 
     if (sheetUrl) {
       await channel.send(`📋 **Army Sheet:** ${sheetUrl}`);

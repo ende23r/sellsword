@@ -8,8 +8,6 @@ vi.mock('../lib/db.js', () => ({
     prepare: vi.fn().mockReturnValue({
       get: vi.fn().mockReturnValue({
         army_name: 'Iron Legion',
-        hex_q: 2,
-        hex_r: 3,
         faction_name: 'Orange',
       }),
     }),

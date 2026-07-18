@@ -75,8 +75,8 @@ async function fetchAllArmyStats(log: string[]): Promise<Map<number, ArmySheetSt
 async function syncSheets(statsMap: Map<number, ArmySheetStats>, log: string[]): Promise<void> {
   const commanders = db.prepare('SELECT * FROM commanders').all() as CommanderRow[];
   const armies = db
-    .prepare('SELECT id, commander_id, hex_q, hex_r FROM armies')
-    .all() as { id: number; commander_id: number; hex_q: number; hex_r: number }[];
+    .prepare('SELECT id, commander_id FROM armies')
+    .all() as { id: number; commander_id: number }[];
 
   const armyByCommander = new Map(armies.map((a) => [a.commander_id, a]));
   let synced = 0;
@@ -89,7 +89,7 @@ async function syncSheets(statsMap: Map<number, ArmySheetStats>, log: string[]):
     const stats = statsMap.get(army.id);
     if (!stats) continue;
     try {
-      await syncArmySheet(sheetId, stats, army.hex_q, army.hex_r);
+      await syncArmySheet(sheetId, stats);
       synced++;
     } catch (err) {
       log.push(`⚠️ Sheet sync failed for army ${army.id}: ${(err as Error).message}`);

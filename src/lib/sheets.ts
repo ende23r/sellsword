@@ -28,6 +28,9 @@ export type ArmySheetStats = {
   supplies: number;
   coin: number;
   goods: number;
+  // Position (source of truth; written to Hex cell as "q,r")
+  hex_q: number;
+  hex_r: number;
   // State
   stance: 'allow_passage' | 'engage';
   // Combat strengths (sheet-calculated; bot reads only)
@@ -76,7 +79,7 @@ const ROW = {
   SUPPLIES: 6,
   COIN: 7,
   GOODS: 8,
-  // HEX is row index 9 — not a stat, skipped
+  HEX: 9,
   STANCE: 10,
   INFANTRY_STRENGTH: 11,
   CAVALRY_STRENGTH: 12,
@@ -102,6 +105,14 @@ export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetSt
     const s = String(v ?? '').trim().toLowerCase();
     return s === 'engage' || s === 'block' ? 'engage' : 'allow_passage';
   };
+  const parseHex = (v: string | number | null): { q: number; r: number } => {
+    const parts = String(v ?? '').split(',');
+    const q = parseInt(parts[0] ?? '', 10);
+    const r = parseInt(parts[1] ?? '', 10);
+    return { q: isNaN(q) ? 0 : q, r: isNaN(r) ? 0 : r };
+  };
+
+  const hex = parseHex(cell(rows[ROW.HEX]));
 
   return {
     infantry: num(cell(rows[ROW.INFANTRY]), 0),
@@ -113,6 +124,8 @@ export function parseSheetStats(rows: (string | number | null)[][]): ArmySheetSt
     supplies: num(cell(rows[ROW.SUPPLIES]), 0),
     coin: num(cell(rows[ROW.COIN]), 0),
     goods: num(cell(rows[ROW.GOODS]), 0),
+    hex_q: hex.q,
+    hex_r: hex.r,
     stance: stance(cell(rows[ROW.STANCE])),
     infantry_strength: num(cell(rows[ROW.INFANTRY_STRENGTH]), 0),
     cavalry_strength: num(cell(rows[ROW.CAVALRY_STRENGTH]), 0),
@@ -253,12 +266,7 @@ export async function fetchArmyStats(sheetId: string): Promise<ArmySheetStats> {
   return parseSheetStats((res.data.values ?? []) as (string | number | null)[][]);
 }
 
-export async function syncArmySheet(
-  sheetId: string,
-  stats: ArmySheetStats,
-  hexQ: number,
-  hexR: number,
-): Promise<void> {
+export async function syncArmySheet(sheetId: string, stats: ArmySheetStats): Promise<void> {
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
   const data = [
     { range: ARMY_SHEET_CELLS.INFANTRY, values: [[stats.infantry]] },
@@ -270,7 +278,7 @@ export async function syncArmySheet(
     { range: ARMY_SHEET_CELLS.SUPPLIES, values: [[stats.supplies]] },
     { range: ARMY_SHEET_CELLS.COIN, values: [[stats.coin]] },
     { range: ARMY_SHEET_CELLS.GOODS, values: [[stats.goods]] },
-    { range: ARMY_SHEET_CELLS.HEX, values: [[`${hexQ},${hexR}`]] },
+    { range: ARMY_SHEET_CELLS.HEX, values: [[`${stats.hex_q},${stats.hex_r}`]] },
     { range: ARMY_SHEET_CELLS.STANCE, values: [[stats.stance]] },
     { range: ARMY_SHEET_CELLS.MAX_MORALE, values: [[stats.max_morale]] },
     { range: ARMY_SHEET_CELLS.FORCED_MARCH, values: [[stats.forced_march ? 1 : 0]] },
@@ -313,7 +321,7 @@ export async function writePace(
 
 export async function syncAllArmySheets(
   commanders: CommanderRow[],
-  armies: { id: number; commander_id: number; hex_q: number; hex_r: number }[],
+  armies: { id: number; commander_id: number }[],
   statsMap: Map<number, ArmySheetStats>,
 ): Promise<void> {
   const armyByCommander = new Map(armies.map((a) => [a.commander_id, a]));
@@ -325,6 +333,6 @@ export async function syncAllArmySheets(
     if (!sheetId) continue;
     const stats = statsMap.get(army.id);
     if (!stats) continue;
-    await syncArmySheet(sheetId, stats, army.hex_q, army.hex_r);
+    await syncArmySheet(sheetId, stats);
   }
 }
