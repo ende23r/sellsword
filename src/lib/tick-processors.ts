@@ -414,6 +414,15 @@ export function supplyColor(daysLeft: number | null): number {
   return 0x922b21;                                          // dark red (out)
 }
 
+// Rough tick-duration readout for the admin report — enough to spot a tick
+// that's suddenly taking much longer than usual.
+export function formatTickDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 1) return '<1s';
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
 export function formatDateUTC(date: Date): string {
   const d = date.getUTCDate();
   const suffix = (d === 1 || d === 21 || d === 31) ? 'st'

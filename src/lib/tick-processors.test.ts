@@ -6,6 +6,7 @@ import {
   consumeSupplies,
   deliverMessages,
   formatDateUTC,
+  formatTickDuration,
   postSellNotifications,
   postSupplyUpdates,
   processForage,
@@ -827,6 +828,25 @@ describe('deliverMessages', () => {
     // Not marked delivered — will retry next tick
     const msg = db.prepare('SELECT delivered FROM messages').get() as { delivered: number };
     expect(msg.delivered).toBe(0);
+  });
+});
+
+// ── formatTickDuration ────────────────────────────────────────────────────────
+
+describe('formatTickDuration', () => {
+  it('rounds to the nearest second', () => {
+    expect(formatTickDuration(3400)).toBe('3s');
+    expect(formatTickDuration(3600)).toBe('4s');
+  });
+
+  it('shows sub-second durations as <1s', () => {
+    expect(formatTickDuration(0)).toBe('<1s');
+    expect(formatTickDuration(400)).toBe('<1s');
+  });
+
+  it('breaks out minutes for long ticks', () => {
+    expect(formatTickDuration(95000)).toBe('1m 35s');
+    expect(formatTickDuration(120000)).toBe('2m 0s');
   });
 });
 

@@ -5,6 +5,7 @@ import { extractSheetId, fetchArmyStats, fetchDemands, syncArmySheet, writeGoods
 import {
   consumeSupplies,
   deliverMessages,
+  formatTickDuration,
   postSellNotifications,
   postSupplyUpdates,
   processForage,
@@ -23,6 +24,7 @@ export async function runMessageDelivery(adminChannel: TextChannel): Promise<voi
 }
 
 export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChannel): Promise<void> {
+  const startedAt = Date.now();
   const log: string[] = [`**Daily Update — ${phase.toUpperCase()}**`];
   const client = adminChannel.client;
 
@@ -52,6 +54,7 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
 
   await deliverMessages(db, client, log);
   await syncSheets(statsMap, log);
+  log.push(`⏱️ Tick ran in ${formatTickDuration(Date.now() - startedAt)}.`);
   await adminChannel.send(log.join('\n'));
 }
 
