@@ -331,6 +331,7 @@ describe('postSellNotifications', () => {
     expect(fetch).toHaveBeenCalledWith('ch-army');
     expect(send).toHaveBeenCalledOnce();
     const message = send.mock.calls[0][0] as string;
+    expect(message).toContain('Night Update');
     expect(message).toContain(`<@user-${id}>`);
     expect(message).toContain('Sold 300 silk for 600 coin.');
   });

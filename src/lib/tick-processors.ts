@@ -341,7 +341,7 @@ export async function postSellNotifications(
       const ch = await client.channels.fetch(row.discord_channel_id);
       if (ch?.isTextBased()) {
         await (ch as TextChannel).send(
-          `💰 <@${row.discord_user_id}> **Market results**\n` +
+          `🌙 <@${row.discord_user_id}> **Night Update**\n` +
             lines.map((l) => `> ${l}`).join('\n'),
         );
       }
