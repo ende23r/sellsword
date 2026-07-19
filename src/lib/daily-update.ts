@@ -6,6 +6,7 @@ import {
   consumeSupplies,
   deliverMessages,
   formatTickDuration,
+  postMovedArmyMaps,
   postSellNotifications,
   postSupplyUpdates,
   processForage,
@@ -35,6 +36,7 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
     processNightMarchMovement(db, statsMap, log);
     consumeSupplies(db, statsMap, log);
     await postSupplyUpdates(db, statsMap, client, log);
+    await postMovedArmyMaps(db, statsMap, client, log);
   }
 
   if (phase === 'night') {

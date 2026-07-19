@@ -3,8 +3,8 @@
 // the live singleton or the Google Sheets API.
 
 import type Database from 'better-sqlite3';
-import { EmbedBuilder, type Client, type TextChannel } from 'discord.js';
-import type { ArmyRow, HexRow, OrderRow } from './db.js'; // type-only: no side effects
+import { AttachmentBuilder, EmbedBuilder, type Client, type TextChannel } from 'discord.js';
+import type { ArmyRow, HexRow, OrderRow, StrongholdRow } from './db.js'; // type-only: no side effects
 import {
   isCavalryOnly,
   supplyUpkeep,
@@ -13,6 +13,7 @@ import {
   type Demand,
 } from './sheets.js';
 import { findPath, hexesInRange } from './hex.js';
+import { getArmiesForMap, getPlayerMapHexes, renderMap } from './map-render.js';
 
 type Log = string[];
 
@@ -95,6 +96,65 @@ export function processNightMarchMovement(
     const hexesAllowed = s.forced_march ? 2 : 1;
     advanceArmy(database, army, order, params, hexesAllowed, validCoords, stats, factions, log);
     rollMarchMorale(stats, army.id, army.name ?? String(army.id), 'night', log);
+  }
+}
+
+// ── Morning map renders for moved armies (morning tick) ──────────────────────
+
+// Any move (day march or night march) sets armies.moved_since_morning; the
+// morning tick renders each flagged army's scouted view into its channel and
+// clears the flag. The flag survives restarts, so night-tick movers still get
+// their map even if the bot bounced overnight.
+export async function postMovedArmyMaps(
+  database: Database.Database,
+  stats: Map<number, ArmySheetStats>,
+  client: Client,
+  log: Log,
+): Promise<void> {
+  const moved = database
+    .prepare(
+      `SELECT a.id, a.name, c.discord_channel_id
+       FROM armies a JOIN commanders c ON c.id = a.commander_id
+       WHERE a.moved_since_morning = 1`,
+    )
+    .all() as { id: number; name: string | null; discord_channel_id: string | null }[];
+  if (moved.length === 0) return;
+
+  const clearFlag = database.prepare('UPDATE armies SET moved_since_morning = 0 WHERE id = ?');
+  const allHexes = database.prepare('SELECT * FROM hexes').all() as HexRow[];
+  const strongholds = database.prepare('SELECT * FROM strongholds').all() as StrongholdRow[];
+  const armyPositions = getArmiesForMap(database, stats);
+
+  for (const army of moved) {
+    const s = stats.get(army.id);
+    if (!s) continue; // stats fetch failed this tick — flag stays set, retry next morning
+
+    if (!army.discord_channel_id) {
+      log.push(`⚠️ Army ${army.id} moved but has no army channel for a map render.`);
+      clearFlag.run(army.id);
+      continue;
+    }
+
+    try {
+      const { hexes, visibleCoords } = getPlayerMapHexes(
+        allHexes,
+        { q: s.hex_q, r: s.hex_r },
+        s.scouting_range,
+      );
+      const png = await renderMap(hexes, strongholds, { visibleCoords, armyPositions });
+      const ch = await client.channels.fetch(army.discord_channel_id);
+      if (ch?.isTextBased()) {
+        await (ch as TextChannel).send({
+          content: `🗺️ **${army.name ?? `Army ${army.id}`}** — position after marching:`,
+          files: [new AttachmentBuilder(png, { name: 'map.png' })],
+        });
+        clearFlag.run(army.id);
+      }
+    } catch (err) {
+      log.push(
+        `⚠️ Failed to post map for army ${army.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }
 
@@ -576,6 +636,8 @@ function advanceArmy(
 
   const reached = dest.q === to.q && dest.r === to.r;
   if (reached) markOrderProcessed(database, order.id);
+  // Queue a map render for the next morning tick (postMovedArmyMaps)
+  database.prepare('UPDATE armies SET moved_since_morning = 1 WHERE id = ?').run(army.id);
   log.push(
     `🚶 **${army.name ?? army.id}** moved to (${dest.q},${dest.r})${reached ? ' — arrived' : ''}.`,
   );

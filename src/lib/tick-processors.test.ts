@@ -7,6 +7,7 @@ import {
   deliverMessages,
   formatDateUTC,
   formatTickDuration,
+  postMovedArmyMaps,
   postSellNotifications,
   postSupplyUpdates,
   processForage,
@@ -364,6 +365,118 @@ describe('postSellNotifications', () => {
   });
 });
 
+// ── postMovedArmyMaps ─────────────────────────────────────────────────────────
+
+describe('postMovedArmyMaps', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+    seedHex(db, 0, 0);
+    seedHex(db, 0, 1);
+    seedHex(db, 1, 0);
+  });
+
+  function flagMoved(db: Database.Database, armyId: number) {
+    db.prepare('UPDATE armies SET moved_since_morning = 1 WHERE id = ?').run(armyId);
+  }
+
+  function setChannel(db: Database.Database, commanderId: number, channelId: string | null) {
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run(
+      channelId,
+      commanderId,
+    );
+  }
+
+  it('posts a map to each flagged army channel and clears the flag', async () => {
+    const id = seedArmy(db, { name: 'Iron Legion' });
+    setChannel(db, id, 'ch-army');
+    flagMoved(db, id);
+    const stats = new Map([[id, makeStats({ hex_q: 0, hex_r: 1 })]]);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    const fetch = vi.fn().mockResolvedValue({ isTextBased: () => true, send });
+    const mockClient = { channels: { fetch } };
+
+    await postMovedArmyMaps(db, stats, mockClient as never, []);
+
+    expect(fetch).toHaveBeenCalledWith('ch-army');
+    expect(send).toHaveBeenCalledOnce();
+    const payload = send.mock.calls[0][0] as { content: string; files: unknown[] };
+    expect(payload.content).toContain('Iron Legion');
+    expect(payload.files).toHaveLength(1);
+
+    const flag = db
+      .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
+      .get(id) as { moved_since_morning: number };
+    expect(flag.moved_since_morning).toBe(0);
+  });
+
+  it('ignores armies that have not moved', async () => {
+    const id = seedArmy(db);
+    setChannel(db, id, 'ch-army');
+    const stats = new Map([[id, makeStats()]]);
+
+    const mockClient = { channels: { fetch: vi.fn() } };
+
+    await postMovedArmyMaps(db, stats, mockClient as never, []);
+
+    expect(mockClient.channels.fetch).not.toHaveBeenCalled();
+  });
+
+  it('warns and clears the flag when the army has no channel', async () => {
+    const id = seedArmy(db); // no channel
+    flagMoved(db, id);
+    const stats = new Map([[id, makeStats()]]);
+    const log: string[] = [];
+    const mockClient = { channels: { fetch: vi.fn() } };
+
+    await postMovedArmyMaps(db, stats, mockClient as never, log);
+
+    expect(log.some((l) => l.includes('no army channel'))).toBe(true);
+    const flag = db
+      .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
+      .get(id) as { moved_since_morning: number };
+    expect(flag.moved_since_morning).toBe(0);
+  });
+
+  it('warns and keeps the flag when the send fails, to retry next morning', async () => {
+    const id = seedArmy(db);
+    setChannel(db, id, 'ch-army');
+    flagMoved(db, id);
+    const stats = new Map([[id, makeStats()]]);
+    const log: string[] = [];
+    const mockClient = {
+      channels: { fetch: vi.fn().mockRejectedValue(new Error('Missing Access')) },
+    };
+
+    await postMovedArmyMaps(db, stats, mockClient as never, log);
+
+    expect(log.some((l) => l.includes('Missing Access'))).toBe(true);
+    const flag = db
+      .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
+      .get(id) as { moved_since_morning: number };
+    expect(flag.moved_since_morning).toBe(1);
+  });
+
+  it('keeps the flag when the army has no stats this tick', async () => {
+    const id = seedArmy(db);
+    setChannel(db, id, 'ch-army');
+    flagMoved(db, id);
+    const log: string[] = [];
+    const mockClient = { channels: { fetch: vi.fn() } };
+
+    await postMovedArmyMaps(db, new Map(), mockClient as never, log);
+
+    expect(mockClient.channels.fetch).not.toHaveBeenCalled();
+    const flag = db
+      .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
+      .get(id) as { moved_since_morning: number };
+    expect(flag.moved_since_morning).toBe(1);
+  });
+});
+
 // ── consumeSupplies ───────────────────────────────────────────────────────────
 
 describe('consumeSupplies', () => {
@@ -544,6 +657,35 @@ describe('processMovement', () => {
       processed_at: string | null;
     };
     expect(order.processed_at).not.toBeNull();
+  });
+
+  it('flags moved armies for the morning map render', () => {
+    const armyId = seedArmy(db);
+    const stats = new Map([[armyId, makeStats()]]);
+    seedHex(db, 0, 0);
+    seedHex(db, 0, 1);
+    seedOrder(db, armyId, 'move', { dest_q: 0, dest_r: 1, roads_only: false });
+
+    processMovement(db, stats, []);
+
+    const row = db
+      .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
+      .get(armyId) as { moved_since_morning: number };
+    expect(row.moved_since_morning).toBe(1);
+  });
+
+  it('does not flag armies that could not move', () => {
+    const armyId = seedArmy(db);
+    const stats = new Map([[armyId, makeStats()]]);
+    seedHex(db, 0, 0);
+    seedOrder(db, armyId, 'move', { dest_q: 9, dest_r: 9, roads_only: false }); // no path
+
+    processMovement(db, stats, []);
+
+    const row = db
+      .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
+      .get(armyId) as { moved_since_morning: number };
+    expect(row.moved_since_morning).toBe(0);
   });
 
   it('advances 1 hex per tick off-road, leaving order pending', () => {
@@ -1054,6 +1196,10 @@ describe('processNightMarchMovement', () => {
     processNightMarchMovement(db, stats, []);
 
     expect(stats.get(id)!.hex_q).toBe(1);
+    const flag = db
+      .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
+      .get(id) as { moved_since_morning: number };
+    expect(flag.moved_since_morning).toBe(1);
     const order = db.prepare('SELECT processed_at FROM orders WHERE army_id = ?').get(id) as {
       processed_at: string | null;
     };

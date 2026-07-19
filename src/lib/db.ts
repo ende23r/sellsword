@@ -123,6 +123,7 @@ export type ArmyRow = {
   id: number;
   commander_id: number;
   name: string | null;
+  moved_since_morning: number;
 };
 
 export type FactionRow = {

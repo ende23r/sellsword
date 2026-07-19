@@ -42,9 +42,10 @@ export const DB_SCHEMA = `
   );
 
   CREATE TABLE IF NOT EXISTS armies (
-    id              INTEGER PRIMARY KEY,
-    commander_id    INTEGER NOT NULL UNIQUE REFERENCES commanders(id),
-    name            TEXT
+    id                  INTEGER PRIMARY KEY,
+    commander_id        INTEGER NOT NULL UNIQUE REFERENCES commanders(id),
+    name                TEXT,
+    moved_since_morning INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS orders (
