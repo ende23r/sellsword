@@ -160,10 +160,24 @@ describe('parseSheetStats', () => {
     expect(stats.morale).toBe(9);
   });
 
-  it('defaults non-numeric strings to safe fallbacks', () => {
-    const stats = parseSheetStats(makeCells({ noncombatants: 'N/A', morale: 'unknown' }), [], [], []);
+  it('defaults non-numeric strings to safe fallbacks for GM-owned fields', () => {
+    const stats = parseSheetStats(makeCells({ noncombatants: 'N/A', scouting_range: '?' }), [], [], []);
     expect(stats.noncombatants).toBe(0);
-    expect(stats.morale).toBe(9);
+    expect(stats.scouting_range).toBe(1);
+  });
+
+  // supplies, coin, and morale are bot-written: a silently-defaulted bad read
+  // would be synced back over the sheet's real value after the tick. Fail the
+  // fetch loudly instead so the army is skipped and the sheet left untouched.
+  it('throws on unparseable supplies rather than defaulting to 0', () => {
+    expect(() => parseSheetStats(makeCells({ supplies: '10,000' }), [], [], [])).toThrow(
+      /supplies.*"10,000"/,
+    );
+  });
+
+  it('throws on unparseable coin and morale', () => {
+    expect(() => parseSheetStats(makeCells({ coin: 'abc' }), [], [], [])).toThrow(/coin/);
+    expect(() => parseSheetStats(makeCells({ morale: 'unknown' }), [], [], [])).toThrow(/morale/);
   });
 
   it('parses stance "engage"', () => {

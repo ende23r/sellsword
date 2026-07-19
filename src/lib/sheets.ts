@@ -270,6 +270,18 @@ export function parseSheetStats(
     const n = Number(v);
     return v !== null && v !== undefined && v !== '' && !isNaN(n) ? Math.round(n) : fallback;
   };
+  // For bot-written scalars (supplies, coin, morale): a silently-defaulted bad
+  // read would be synced back over the sheet's real value after the tick, so a
+  // non-empty cell that doesn't parse fails the fetch loudly instead. Empty
+  // still means "fresh sheet" and takes the default.
+  const strictNum = (name: string, v: RawCell, emptyDefault: number): number => {
+    if (v === null || v === undefined || v === '') return emptyDefault;
+    const n = Number(v);
+    if (isNaN(n)) {
+      throw new Error(`${name} cell "${String(v)}" is not a number — fix the cell.`);
+    }
+    return Math.round(n);
+  };
   const bool = (v: RawCell): boolean => {
     if (v === null || v === undefined || v === '') return false;
     const s = String(v).trim().toLowerCase();
@@ -298,10 +310,10 @@ export function parseSheetStats(
     infantry_detachments: parseDetachments(infantryRows, 'Infantry', 1),
     cavalry_detachments: parseDetachments(cavalryRows, 'Cavalry', 10),
     noncombatants: num(cells.noncombatants, 0),
-    morale: num(cells.morale, 9),
+    morale: strictNum('morale', cells.morale, 9),
     resting_morale: num(cells.resting_morale, 9),
-    supplies: num(cells.supplies, 0),
-    coin: num(cells.coin, 0),
+    supplies: strictNum('supplies', cells.supplies, 0),
+    coin: strictNum('coin', cells.coin, 0),
     goods: parseGoods(goodsRows),
     hex_q: hex.q,
     hex_r: hex.r,
@@ -370,6 +382,7 @@ export async function fetchDemands(): Promise<{ demands: Demand[]; warnings: str
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
     range: 'Demands!A2:D',
+    valueRenderOption: 'UNFORMATTED_VALUE',
   });
   return parseDemands((res.data.values ?? []) as RawCell[][]);
 }
@@ -463,6 +476,9 @@ export async function fetchArmyStats(sheetId: string): Promise<ArmySheetStats> {
     res = await sheets.spreadsheets.values.batchGet({
       spreadsheetId: sheetId,
       ranges: [...STAT_RANGE_NAMES],
+      // Raw values, not display strings — a cell formatted as "10,000" must
+      // come back as the number 10000, not a string Number() can't parse.
+      valueRenderOption: 'UNFORMATTED_VALUE',
     });
   } catch (err) {
     // A missing named range fails the whole batch with an unhelpful "Unable to
