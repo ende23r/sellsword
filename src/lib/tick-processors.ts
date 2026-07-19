@@ -141,7 +141,11 @@ export async function postMovedArmyMaps(
         { q: s.hex_q, r: s.hex_r },
         s.scouting_range,
       );
-      const png = await renderMap(hexes, strongholds, { visibleCoords, armyPositions });
+      const png = await renderMap(hexes, strongholds, {
+        visibleCoords,
+        armyPositions,
+        showSettlementScores: false,
+      });
       const ch = await client.channels.fetch(army.discord_channel_id);
       if (ch?.isTextBased()) {
         await (ch as TextChannel).send({

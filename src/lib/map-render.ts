@@ -84,13 +84,14 @@ type RenderOptions = {
   visibleCoords?: Set<string>; // 'q,r' strings; undefined = show all (admin view)
   armyPositions?: ArmyMarker[];
   hexSize?: number; // override default size
+  showSettlementScores?: boolean; // default true; player maps pass false
 };
 
-export async function renderMap(
+export function buildMapSvg(
   hexes: HexRow[],
   strongholds: StrongholdRow[],
   options: RenderOptions = {},
-): Promise<Buffer> {
+): string {
   if (hexes.length === 0) throw new Error('No hex data to render.');
 
   const size = options.hexSize ?? HEX_SIZE;
@@ -161,8 +162,8 @@ export async function renderMap(
       );
     }
 
-    // Settlement score label
-    if (hex.settlement > 0) {
+    // Settlement score label (full map only — hidden from player views)
+    if (hex.settlement > 0 && (options.showSettlementScores ?? true)) {
       labels.push(
         `<text x="${cx.toFixed(1)}" y="${(cy + size * 0.35).toFixed(1)}" text-anchor="middle" font-size="18" fill="#333" font-family="sans-serif">${hex.settlement}</text>`,
       );
@@ -239,7 +240,7 @@ export async function renderMap(
     }
   }
 
-  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="${width}" height="${height}" fill="#1a1a2e"/>
   ${hexPolygons.join('\n  ')}
@@ -249,7 +250,14 @@ export async function renderMap(
   ${riverLines.join('\n  ')}
   ${labels.join('\n  ')}
 </svg>`;
+}
 
+export async function renderMap(
+  hexes: HexRow[],
+  strongholds: StrongholdRow[],
+  options: RenderOptions = {},
+): Promise<Buffer> {
+  const svg = buildMapSvg(hexes, strongholds, options);
   const resvg = new Resvg(svg, { fitTo: { mode: 'original' } });
   return Buffer.from(resvg.render().asPng());
 }

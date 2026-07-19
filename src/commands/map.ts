@@ -81,6 +81,7 @@ const map: Command = {
     const png = await renderMap(renderHexes, strongholds, {
       visibleCoords,
       armyPositions,
+      showSettlementScores: fullMap,
     });
 
     const attachment = new AttachmentBuilder(png, { name: 'map.png' });

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import { armyInitials, armyRingOffsets, getArmiesForMap, getPlayerMapHexes, renderMap, trianglePoints } from './map-render.js';
+import { armyInitials, armyRingOffsets, buildMapSvg, getArmiesForMap, getPlayerMapHexes, renderMap, trianglePoints } from './map-render.js';
 import type { HexRow } from './db.js';
 
 function makeHex(q: number, r: number): HexRow {
@@ -13,6 +13,20 @@ describe('renderMap', () => {
     const hex = { ...makeHex(0, 0), roads: 'not-json{', rivers: 'also-bad' };
     const png = await renderMap([hex], []);
     expect(png).toBeInstanceOf(Buffer);
+  });
+});
+
+describe('buildMapSvg', () => {
+  it('includes settlement scores by default (full map)', () => {
+    const hex = { ...makeHex(0, 0), settlement: 42 };
+    const svg = buildMapSvg([hex], []);
+    expect(svg).toContain('>42<');
+  });
+
+  it('omits settlement scores when showSettlementScores is false (player map)', () => {
+    const hex = { ...makeHex(0, 0), settlement: 42 };
+    const svg = buildMapSvg([hex], [], { showSettlementScores: false });
+    expect(svg).not.toContain('>42<');
   });
 });
 
