@@ -15,3 +15,6 @@ node_modules/
 
 # Locally rendered map
 *.png
+
+# Dev copy of the Cataphracts rules
+/RULES.md
