@@ -1087,6 +1087,71 @@ describe('postSupplyUpdates', () => {
     expect(embed.description).toContain('Days 5');
   });
 
+  it('lists pending orders in the description', async () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'move', { dest_q: 3, dest_r: -2, roads_only: true });
+    seedOrder(db, id, 'forage');
+    const stats = new Map([[id, makeStats()]]);
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
+
+    const desc = getEmbed(send).description ?? '';
+    expect(desc).toContain('Moving to (3,-2) by road');
+    expect(desc).toContain('Foraging');
+  });
+
+  it('shows Orders: None when the army has no pending orders', async () => {
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats()]]);
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
+
+    expect(getEmbed(send).description ?? '').toContain('Orders: None');
+  });
+
+  it('does not list already-processed orders', async () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'sell');
+    db.prepare("UPDATE orders SET processed_at = datetime('now')").run();
+    const stats = new Map([[id, makeStats()]]);
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
+
+    expect(getEmbed(send).description ?? '').toContain('Orders: None');
+  });
+
+  it('notes forced march and night march from the sheet flags', async () => {
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats({ forced_march: true, night_march: true })]]);
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
+
+    const desc = getEmbed(send).description ?? '';
+    expect(desc).toContain('Forced march');
+    expect(desc).toContain('Night march');
+  });
+
+  it('omits march notes when neither flag is set', async () => {
+    const id = seedArmy(db);
+    const stats = new Map([[id, makeStats()]]);
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
+
+    const desc = getEmbed(send).description ?? '';
+    expect(desc).not.toContain('Forced march');
+    expect(desc).not.toContain('Night march');
+  });
+
   it('sets the embed color based on days remaining', async () => {
     const id = seedArmy(db);
     const stats = new Map([[id, makeStats({ infantry_detachments: [det({ size: 1000 })], supplies: 5000 })]]);

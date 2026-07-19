@@ -496,6 +496,38 @@ export function formatDateUTC(date: Date): string {
   return `${UTC_DAYS[date.getUTCDay()]}, ${UTC_MONTHS[date.getUTCMonth()]} ${d}${suffix}`;
 }
 
+// One human-readable phrase per pending order for the morning status embed.
+function describeOrders(database: Database.Database, armyId: number): string {
+  const orders = database
+    .prepare('SELECT * FROM orders WHERE processed_at IS NULL AND army_id = ?')
+    .all(armyId) as OrderRow[];
+
+  const phrases = orders.map((order) => {
+    switch (order.type) {
+      case 'move': {
+        try {
+          const p = JSON.parse(order.parameters) as MoveOrderParams;
+          return `Moving to (${p.dest_q},${p.dest_r})${p.roads_only ? ' by road' : ''}`;
+        } catch {
+          return 'Moving';
+        }
+      }
+      case 'forage':
+        return 'Foraging';
+      case 'sell':
+        return 'Selling goods';
+      case 'rest':
+        return 'Resting';
+      case 'torch':
+        return 'Torching';
+      default:
+        return order.type;
+    }
+  });
+
+  return phrases.length > 0 ? phrases.join(' • ') : 'None';
+}
+
 export async function postSupplyUpdates(
   database: Database.Database,
   stats: Map<number, ArmySheetStats>,
@@ -528,6 +560,13 @@ export async function postSupplyUpdates(
       const zeroDate = new Date(now.getTime() + daysLeft * 86400000);
       description += `\n🚨 Zero Date ${formatDateUTC(zeroDate)} UTC`;
     }
+
+    description += `\n📜 Orders: ${describeOrders(database, army.id)}`;
+    const marchNotes = [
+      ...(s.forced_march ? ['⚡ Forced march'] : []),
+      ...(s.night_march ? ['🌙 Night march'] : []),
+    ];
+    if (marchNotes.length > 0) description += `\n${marchNotes.join(' • ')}`;
 
     const embed = new EmbedBuilder()
       .setTitle(`⚡ Status: ${army.name ?? 'Unknown'}`)
