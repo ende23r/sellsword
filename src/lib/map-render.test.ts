@@ -159,6 +159,37 @@ describe('getPlayerMapHexes', () => {
     expect(fogOnly.length).toBe(12); // ring 2 has 12 hexes
   });
 
+  it('sees only 1 hex into impassable terrain, however far the scout range', () => {
+    // A pier of sea hexes east of a land center: scouts can't cross water.
+    const allHexes = [
+      makeHex(0, 0),
+      { ...makeHex(1, 0), terrain: 'sea', speed: 0 },
+      { ...makeHex(2, 0), terrain: 'sea', speed: 0 },
+      { ...makeHex(3, 0), terrain: 'sea', speed: 0 },
+    ];
+    const { hexes, visibleCoords } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 3);
+
+    expect(visibleCoords.has('1,0')).toBe(true); // first sea hex is visible from shore
+    expect(visibleCoords.has('2,0')).toBe(false); // beyond it is not
+    // ...and the deeper sea hexes are not rendered at all, not even as fog
+    expect(hexes.map((h: HexRow) => `${h.q},${h.r}`).sort()).toEqual(['0,0', '1,0']);
+  });
+
+  it('scouts see around impassable hexes via traversable ground', () => {
+    const allHexes = [
+      makeHex(0, 0),
+      { ...makeHex(1, 0), terrain: 'sea', speed: 0 },
+      makeHex(1, -1),
+      makeHex(2, -1),
+      makeHex(2, 0),
+    ];
+    const { visibleCoords } = getPlayerMapHexes(allHexes, { q: 0, r: 0 }, 3);
+
+    // (2,0) is 2 hexes away in a straight line through sea, but reachable
+    // by land through (1,-1) and (2,-1) within range 3
+    expect(visibleCoords.has('2,0')).toBe(true);
+  });
+
   it('does not add phantom hexes that do not exist in allHexes', () => {
     // Only 7 hexes in range 1; fog ring at range 2 doesn't exist in DB
     const allHexes = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 },

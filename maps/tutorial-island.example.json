@@ -201,6 +201,15 @@
     },
     {
       "q": -1,
+      "r": -1,
+      "terrain": "sea",
+      "settlement": 0,
+      "speed": 0,
+      "roads": [],
+      "rivers": []
+    },
+    {
+      "q": -1,
       "r": 0,
       "terrain": "sea",
       "settlement": 0,

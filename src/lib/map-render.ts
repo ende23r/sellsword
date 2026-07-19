@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { Resvg } from '@resvg/resvg-js';
 import type { HexRow, StrongholdRow } from './db.js';
-import { hexCorners, hexesInRange, hexToPixel } from './hex.js';
+import { hexCorners, hexNeighbors, hexToPixel } from './hex.js';
 import type { HexCoord } from './hex.js';
 
 export type ArmyMarker = {
@@ -74,9 +74,37 @@ export function getPlayerMapHexes(
   center: HexCoord,
   scoutRange: number,
 ): { hexes: HexRow[]; visibleCoords: Set<string> } {
-  const visibleCoords = new Set(hexesInRange(center, scoutRange).map((h) => `${h.q},${h.r}`));
-  const fogCoords = new Set(hexesInRange(center, scoutRange + 1).map((h) => `${h.q},${h.r}`));
-  const hexes = allHexes.filter((h) => fogCoords.has(`${h.q},${h.r}`));
+  const byCoord = new Map(allHexes.map((h) => [`${h.q},${h.r}`, h]));
+  const traversable = (key: string) => (byCoord.get(key)?.speed ?? 0) > 0;
+
+  // Scouts travel, so visibility flood-fills through traversable ground.
+  // Impassable hexes (speed 0: sea, coast) and off-map coords are seen when
+  // adjacent to a scouted hex but never crossed.
+  const visibleCoords = new Set<string>([`${center.q},${center.r}`]);
+  let frontier: HexCoord[] = [center];
+  for (let step = 0; step < scoutRange; step++) {
+    const next: HexCoord[] = [];
+    for (const c of frontier) {
+      for (const n of hexNeighbors(c)) {
+        const key = `${n.q},${n.r}`;
+        if (visibleCoords.has(key)) continue;
+        visibleCoords.add(key);
+        if (traversable(key)) next.push(n);
+      }
+    }
+    frontier = next;
+  }
+
+  // Fog ring: one hex past the visible edge, but only bordering ground a
+  // scout could stand on — no silhouettes beyond an impassable hex.
+  const renderCoords = new Set(visibleCoords);
+  for (const key of visibleCoords) {
+    if (!traversable(key)) continue;
+    const [q, r] = key.split(',').map(Number);
+    for (const n of hexNeighbors({ q, r })) renderCoords.add(`${n.q},${n.r}`);
+  }
+
+  const hexes = allHexes.filter((h) => renderCoords.has(`${h.q},${h.r}`));
   return { hexes, visibleCoords };
 }
 
