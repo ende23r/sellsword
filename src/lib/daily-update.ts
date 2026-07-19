@@ -5,6 +5,7 @@ import { extractSheetId, fetchArmyStats, fetchDemands, syncArmySheet, writeGoods
 import {
   consumeSupplies,
   deliverMessages,
+  postSellNotifications,
   postSupplyUpdates,
   processForage,
   processMovement,
@@ -45,7 +46,7 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
     );
     const movedArmyIds = processMovement(db, statsMap, log);
     processForage(db, statsMap, log, movingArmyIds);
-    await runSellOrders(statsMap, log);
+    await runSellOrders(statsMap, client, log);
     await removeMoversFromConferences(movedArmyIds, client);
   }
 
@@ -76,7 +77,11 @@ async function fetchAllArmyStats(log: string[]): Promise<Map<number, ArmySheetSt
   return statsMap;
 }
 
-async function runSellOrders(statsMap: Map<number, ArmySheetStats>, log: string[]): Promise<void> {
+async function runSellOrders(
+  statsMap: Map<number, ArmySheetStats>,
+  client: TextChannel['client'],
+  log: string[],
+): Promise<void> {
   const openSellOrders = (
     db
       .prepare("SELECT COUNT(*) AS n FROM orders WHERE processed_at IS NULL AND type = 'sell'")
@@ -98,11 +103,11 @@ async function runSellOrders(statsMap: Map<number, ArmySheetStats>, log: string[
     return;
   }
 
-  const changed = processSellOrders(db, statsMap, demands, log);
+  const sales = processSellOrders(db, statsMap, demands, log);
 
   // Selling is the one mechanic that changes the goods table, so the bot
   // rewrites it; everything else on the sheet's tables stays GM-owned.
-  for (const armyId of changed) {
+  for (const armyId of sales.keys()) {
     const commander = getCommanderByArmyId(armyId);
     const sheetId = extractSheetId(commander?.army_sheet_url);
     const stats = statsMap.get(armyId);
@@ -115,6 +120,8 @@ async function runSellOrders(statsMap: Map<number, ArmySheetStats>, log: string[
       );
     }
   }
+
+  await postSellNotifications(db, sales, client, log);
 }
 
 async function syncSheets(statsMap: Map<number, ArmySheetStats>, log: string[]): Promise<void> {

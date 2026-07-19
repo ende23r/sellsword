@@ -235,19 +235,20 @@ export function processForage(
 // evenly among all armies selling that good there, so competing merchants
 // reduce each other's revenue. The order completes when the army holds no
 // goods matching any demand in its hex; unmatched goods stay in inventory.
-// Returns the IDs of armies whose goods changed (their sheets' goods tables
-// need rewriting).
+// Returns player-facing sale lines keyed by army ID; the key set is exactly
+// the armies whose goods changed (their sheets' goods tables need rewriting,
+// and their channels get pinged via postSellNotifications).
 export function processSellOrders(
   database: Database.Database,
   stats: Map<number, ArmySheetStats>,
   demands: Demand[],
   log: Log,
-): Set<number> {
+): Map<number, string[]> {
   const orders = database
     .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'sell'")
     .all() as OrderRow[];
-  const changed = new Set<number>();
-  if (orders.length === 0) return changed;
+  const sales = new Map<number, string[]>();
+  if (orders.length === 0) return sales;
 
   const norm = (name: string) => name.trim().toLowerCase();
   const armyName = (id: number): string => {
@@ -273,16 +274,18 @@ export function processSellOrders(
       good.count -= sold;
       const earned = Math.round(sold * demand.price);
       s.coin += earned;
-      changed.add(order.army_id);
+      const split = sellers.length > 1 ? ` (market split ${sellers.length} ways)` : '';
       log.push(
-        `💰 **${armyName(order.army_id)}** sold ${sold.toLocaleString()} ${good.name} for ${earned.toLocaleString()} coin at (${demand.hex_q},${demand.hex_r})` +
-          (sellers.length > 1 ? ` (market split ${sellers.length} ways)` : '') +
-          '.',
+        `💰 **${armyName(order.army_id)}** sold ${sold.toLocaleString()} ${good.name} for ${earned.toLocaleString()} coin at (${demand.hex_q},${demand.hex_r})${split}.`,
       );
+      if (!sales.has(order.army_id)) sales.set(order.army_id, []);
+      sales
+        .get(order.army_id)!
+        .push(`Sold ${sold.toLocaleString()} ${good.name} for ${earned.toLocaleString()} coin${split}.`);
     }
   }
 
-  for (const armyId of changed) {
+  for (const armyId of sales.keys()) {
     const s = stats.get(armyId)!;
     s.goods = s.goods.filter((g) => g.count > 0);
   }
@@ -300,8 +303,9 @@ export function processSellOrders(
     if (marketableRemains) continue; // keep resting and selling tomorrow
 
     markOrderProcessed(database, order.id);
-    if (changed.has(order.army_id)) {
+    if (sales.has(order.army_id)) {
       log.push(`✅ **${armyName(order.army_id)}** has sold all marketable goods — sell order complete.`);
+      sales.get(order.army_id)!.push('All marketable goods sold — sell order complete.');
     } else {
       log.push(
         `⚠️ **${armyName(order.army_id)}** has nothing to sell at (${s.hex_q},${s.hex_r}) — sell order cancelled.`,
@@ -309,7 +313,44 @@ export function processSellOrders(
     }
   }
 
-  return changed;
+  return sales;
+}
+
+// Pings each selling army's channel with its market results for the day.
+export async function postSellNotifications(
+  database: Database.Database,
+  sales: Map<number, string[]>,
+  client: Client,
+  log: Log,
+): Promise<void> {
+  for (const [armyId, lines] of sales) {
+    const row = database
+      .prepare(
+        `SELECT c.discord_user_id, c.discord_channel_id
+         FROM armies a JOIN commanders c ON c.id = a.commander_id
+         WHERE a.id = ?`,
+      )
+      .get(armyId) as { discord_user_id: string; discord_channel_id: string | null } | undefined;
+
+    if (!row?.discord_channel_id) {
+      log.push(`⚠️ Army ${armyId} sold goods but has no army channel to notify.`);
+      continue;
+    }
+
+    try {
+      const ch = await client.channels.fetch(row.discord_channel_id);
+      if (ch?.isTextBased()) {
+        await (ch as TextChannel).send(
+          `💰 <@${row.discord_user_id}> **Market results**\n` +
+            lines.map((l) => `> ${l}`).join('\n'),
+        );
+      }
+    } catch (err) {
+      log.push(
+        `⚠️ Failed to post market results for army ${armyId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 }
 
 // ── Message delivery (every tick) ────────────────────────────────────────────

@@ -6,6 +6,7 @@ import {
   consumeSupplies,
   deliverMessages,
   formatDateUTC,
+  postSellNotifications,
   postSupplyUpdates,
   processForage,
   processMovement,
@@ -162,11 +163,11 @@ describe('processSellOrders', () => {
     const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 300 }], coin: 0 })]]);
     const log: string[] = [];
 
-    const changed = processSellOrders(db, stats, [silkDemand], log);
+    const sales = processSellOrders(db, stats, [silkDemand], log);
 
     expect(stats.get(id)!.coin).toBe(600); // 300 × 2
     expect(stats.get(id)!.goods).toEqual([]);
-    expect(changed).toEqual(new Set([id]));
+    expect(new Set(sales.keys())).toEqual(new Set([id]));
     const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as { processed_at: string | null };
     expect(order.processed_at).not.toBeNull();
     expect(log.join('\n')).toContain('Iron Legion');
@@ -253,15 +254,39 @@ describe('processSellOrders', () => {
     const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 100 }], coin: 0, hex_q: 5, hex_r: 5 })]]);
     const log: string[] = [];
 
-    const changed = processSellOrders(db, stats, [silkDemand], log);
+    const sales = processSellOrders(db, stats, [silkDemand], log);
 
     expect(stats.get(id)!.coin).toBe(0);
     expect(stats.get(id)!.goods).toEqual([{ name: 'silk', count: 100 }]);
-    expect(changed.size).toBe(0);
+    expect(sales.size).toBe(0);
     // Nothing sellable here — order cancelled with a warning
     const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as { processed_at: string | null };
     expect(order.processed_at).not.toBeNull();
     expect(log.join('\n')).toContain('nothing to sell');
+  });
+
+  it('returns player-facing sale lines per army, noting completion', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'sell');
+    const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 300 }], coin: 0 })]]);
+
+    const sales = processSellOrders(db, stats, [silkDemand], []);
+
+    const lines = sales.get(id)!;
+    expect(lines.join('\n')).toContain('300');
+    expect(lines.join('\n')).toContain('silk');
+    expect(lines.join('\n')).toContain('600');
+    expect(lines.join('\n')).toContain('complete');
+  });
+
+  it('does not note completion in sale lines while the order stays open', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'sell');
+    const stats = new Map([[id, makeStats({ goods: [{ name: 'silk', count: 800 }], coin: 0 })]]);
+
+    const sales = processSellOrders(db, stats, [silkDemand], []);
+
+    expect(sales.get(id)!.join('\n')).not.toContain('complete');
   });
 
   it('rounds coin from fractional prices', () => {
@@ -272,6 +297,68 @@ describe('processSellOrders', () => {
     processSellOrders(db, stats, [{ ...silkDemand, price: 0.5 }], []);
 
     expect(stats.get(id)!.coin).toBe(51); // round(101 × 0.5)
+  });
+});
+
+// ── postSellNotifications ─────────────────────────────────────────────────────
+
+describe('postSellNotifications', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+  });
+
+  function setChannel(db: Database.Database, commanderId: number, channelId: string | null) {
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run(
+      channelId,
+      commanderId,
+    );
+  }
+
+  it('pings each selling army in its channel with its sale lines', async () => {
+    const id = seedArmy(db);
+    setChannel(db, id, 'ch-army');
+    const sales = new Map([[id, ['Sold 300 silk for 600 coin.']]]);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    const fetch = vi.fn().mockResolvedValue({ isTextBased: () => true, send });
+    const mockClient = { channels: { fetch } };
+
+    await postSellNotifications(db, sales, mockClient as never, []);
+
+    expect(fetch).toHaveBeenCalledWith('ch-army');
+    expect(send).toHaveBeenCalledOnce();
+    const message = send.mock.calls[0][0] as string;
+    expect(message).toContain(`<@user-${id}>`);
+    expect(message).toContain('Sold 300 silk for 600 coin.');
+  });
+
+  it('logs a warning when a selling army has no channel', async () => {
+    const id = seedArmy(db); // discord_channel_id stays null
+    const sales = new Map([[id, ['Sold 300 silk for 600 coin.']]]);
+    const log: string[] = [];
+    const mockClient = { channels: { fetch: vi.fn() } };
+
+    await postSellNotifications(db, sales, mockClient as never, log);
+
+    expect(mockClient.channels.fetch).not.toHaveBeenCalled();
+    expect(log.some((l) => l.includes('no army channel'))).toBe(true);
+  });
+
+  it('logs a warning when the channel send fails', async () => {
+    const id = seedArmy(db);
+    setChannel(db, id, 'ch-army');
+    const sales = new Map([[id, ['Sold 300 silk for 600 coin.']]]);
+    const log: string[] = [];
+    const mockClient = {
+      channels: { fetch: vi.fn().mockRejectedValue(new Error('Missing Access')) },
+    };
+
+    await postSellNotifications(db, sales, mockClient as never, log);
+
+    expect(log.some((l) => l.includes('Missing Access'))).toBe(true);
   });
 });
 
