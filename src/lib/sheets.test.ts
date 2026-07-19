@@ -7,6 +7,7 @@ import {
   parseDetachments,
   parseGoods,
   parseSheetStats,
+  parseStrongholds,
   statWriteData,
   supplyUpkeep,
   totalGoods,
@@ -312,6 +313,85 @@ describe('parseGoods', () => {
 });
 
 // ── parseDemands ──────────────────────────────────────────────────────────────
+
+// ── parseStrongholds ──────────────────────────────────────────────────────────
+
+// Rows as read from Strongholds!A2:H — Hex | Name | Type | Garrison |
+// Controlled By | Threshold | Siege Start | Last Roll
+function strongholdRow(
+  overrides: Partial<Record<0 | 1 | 2 | 3 | 4 | 5 | 6 | 7, string | number | null>> = {},
+): (string | number | null)[] {
+  const row: (string | number | null)[] = ['3,-2', 'Highkeep', 'fortress', 100, 'Empire', 20, '', ''];
+  for (const [k, v] of Object.entries(overrides)) row[Number(k)] = v;
+  return row;
+}
+
+describe('parseStrongholds', () => {
+  it('parses a valid row with 1-based sheet row index (data starts at row 2)', () => {
+    const { strongholds, warnings } = parseStrongholds([strongholdRow()]);
+    expect(warnings).toEqual([]);
+    expect(strongholds).toEqual([
+      {
+        rowIndex: 2,
+        hex_q: 3,
+        hex_r: -2,
+        name: 'Highkeep',
+        type: 'fortress',
+        garrison: 100,
+        controlled_by: 'Empire',
+        threshold: 20,
+        siege_start: null,
+        last_roll: null,
+      },
+    ]);
+  });
+
+  it('parses ISO date strings in the siege columns', () => {
+    const { strongholds } = parseStrongholds([
+      strongholdRow({ 6: '2026-07-01', 7: '2026-07-15' }),
+    ]);
+    expect(strongholds[0].siege_start).toBe('2026-07-01');
+    expect(strongholds[0].last_roll).toBe('2026-07-15');
+  });
+
+  it('converts Sheets date serial numbers to ISO dates', () => {
+    // Serial 45000 = 2023-03-15 (days since 1899-12-30)
+    const { strongholds } = parseStrongholds([strongholdRow({ 6: 45000 })]);
+    expect(strongholds[0].siege_start).toBe('2023-03-15');
+  });
+
+  it('defaults garrison to 0 and controlled_by to null when blank', () => {
+    const { strongholds } = parseStrongholds([strongholdRow({ 3: '', 4: '' })]);
+    expect(strongholds[0].garrison).toBe(0);
+    expect(strongholds[0].controlled_by).toBeNull();
+  });
+
+  it('skips blank rows silently', () => {
+    const { strongholds, warnings } = parseStrongholds([['', '', '', '', '', '', '', '']]);
+    expect(strongholds).toEqual([]);
+    expect(warnings).toEqual([]);
+  });
+
+  it('skips and warns on bad hex, bad type, missing name, and missing threshold', () => {
+    const { strongholds, warnings } = parseStrongholds([
+      strongholdRow({ 0: 'abc' }),
+      strongholdRow({ 2: 'castle' }),
+      strongholdRow({ 1: '' }),
+      strongholdRow({ 5: '' }),
+    ]);
+    expect(strongholds).toEqual([]);
+    expect(warnings).toHaveLength(4);
+    expect(warnings[0]).toContain('row 1');
+    expect(warnings[1]).toContain('castle');
+  });
+
+  it('skips and warns on unparseable dates', () => {
+    const { strongholds, warnings } = parseStrongholds([strongholdRow({ 6: 'last tuesday' })]);
+    expect(strongholds).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('last tuesday');
+  });
+});
 
 describe('parseDemands', () => {
   it('parses rows in column order hex | good | price | volume', () => {

@@ -11,6 +11,7 @@ import {
   totalWagons,
   type ArmySheetStats,
   type Demand,
+  type SheetStronghold,
 } from './sheets.js';
 import { findPath, hexesInRange } from './hex.js';
 import { getArmiesForMap, getPlayerMapHexes, renderMap } from './map-render.js';
@@ -380,14 +381,188 @@ export function processSellOrders(
   return sales;
 }
 
-// Pings each selling army's channel with its market results for the day.
-export async function postSellNotifications(
+// ── Sieges (weekly rolls at night tick, recovery at morning tick) ────────────
+
+// Rule defaults: towns 10, cities 15, fortresses 20.
+export const DEFAULT_THRESHOLDS: Record<SheetStronghold['type'], number> = {
+  town: 10,
+  city: 15,
+  fortress: 20,
+};
+
+const DAY_MS = 86400000;
+
+type SiegeOrderParams = { hex_q: number; hex_r: number };
+
+// Processes siege orders against the Strongholds tab rows (mutated in place).
+// Sieges change state only on positive evidence: an army with no stats this
+// tick still counts as besieging, so a transient sheet failure never lifts a
+// siege. The bot applies only the default −1/week; the GM edits the Threshold
+// cell for disease, resupply, and sortie modifiers.
+// Returns the rowIndexes of mutated rows (for sheet write-back) and
+// player-facing lines per army (for the night update ping).
+export function processSieges(
   database: Database.Database,
-  sales: Map<number, string[]>,
+  stats: Map<number, ArmySheetStats>,
+  strongholds: SheetStronghold[],
+  log: Log,
+  now: Date = new Date(),
+): { changed: Set<number>; armyNotes: Map<number, string[]> } {
+  const changed = new Set<number>();
+  const armyNotes = new Map<number, string[]>();
+  const note = (armyId: number, line: string) => {
+    if (!armyNotes.has(armyId)) armyNotes.set(armyId, []);
+    armyNotes.get(armyId)!.push(line);
+  };
+  const armyName = (id: number): string => {
+    const row = database.prepare('SELECT name FROM armies WHERE id = ?').get(id) as
+      | { name: string | null }
+      | undefined;
+    return row?.name ?? String(id);
+  };
+  const today = now.toISOString().slice(0, 10);
+  const daysSince = (iso: string) => (now.getTime() - Date.parse(iso)) / DAY_MS;
+
+  const orders = database
+    .prepare("SELECT * FROM orders WHERE processed_at IS NULL AND type = 'siege'")
+    .all() as OrderRow[];
+
+  // Cancel only on positive evidence: the army's stats are present and place
+  // it somewhere other than the siege target.
+  const active: { order: OrderRow; target: SiegeOrderParams }[] = [];
+  for (const order of orders) {
+    let target: SiegeOrderParams;
+    try {
+      target = JSON.parse(order.parameters) as SiegeOrderParams;
+    } catch {
+      log.push(`⚠️ Siege order ${order.id} (army ${order.army_id}) has malformed parameters — order cancelled.`);
+      markOrderProcessed(database, order.id);
+      continue;
+    }
+    const s = stats.get(order.army_id);
+    if (s && (s.hex_q !== target.hex_q || s.hex_r !== target.hex_r)) {
+      markOrderProcessed(database, order.id);
+      log.push(`🏳️ **${armyName(order.army_id)}** has left (${target.hex_q},${target.hex_r}) — siege order abandoned.`);
+      note(order.army_id, 'Your army left the siege — siege order abandoned.');
+      continue;
+    }
+    active.push({ order, target });
+  }
+
+  for (const sh of strongholds) {
+    const besiegers = active.filter(
+      ({ target }) => target.hex_q === sh.hex_q && target.hex_r === sh.hex_r,
+    );
+
+    if (besiegers.length === 0) {
+      if (sh.siege_start !== null) {
+        sh.siege_start = null;
+        sh.last_roll = null;
+        changed.add(sh.rowIndex);
+        log.push(`🏳️ The siege of **${sh.name}** has been lifted — no besiegers remain.`);
+      }
+      continue;
+    }
+
+    if (sh.siege_start === null) {
+      sh.siege_start = today;
+      changed.add(sh.rowIndex);
+      const names = besiegers.map(({ order }) => `**${armyName(order.army_id)}**`).join(', ');
+      log.push(`🏰 ${names} lay${besiegers.length === 1 ? 's' : ''} siege to **${sh.name}** (${sh.hex_q},${sh.hex_r}). First threshold roll in 7 days.`);
+      for (const { order } of besiegers) note(order.army_id, `Siege of ${sh.name} begun. First threshold roll in 7 days.`);
+      continue;
+    }
+
+    const anchor = sh.last_roll ?? sh.siege_start;
+    if (daysSince(anchor) < 7) continue;
+
+    // A week under siege: default −1 to threshold, then roll 2d6 — over the
+    // threshold means a traitor or negotiator opens the gates.
+    sh.threshold -= 1;
+    changed.add(sh.rowIndex);
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    const total = d1 + d2;
+
+    if (total > sh.threshold) {
+      const weeks = Math.floor(daysSince(sh.siege_start) / 7);
+      log.push(
+        `⚔️ **The gates of ${sh.name} open!** Threshold roll ${total} (${d1},${d2}) beats ${sh.threshold} after ${weeks} week${weeks === 1 ? '' : 's'} of siege. GM: resolve capture (supplies roll 1d6−${weeks}).`,
+      );
+      for (const { order } of besiegers) {
+        note(order.army_id, `The gates of ${sh.name} open! The defenders yield after ${weeks} week${weeks === 1 ? '' : 's'} of siege.`);
+        markOrderProcessed(database, order.id);
+      }
+      sh.siege_start = null;
+      sh.last_roll = null;
+    } else {
+      sh.last_roll = today;
+      log.push(
+        `🎲 Siege of **${sh.name}**: threshold falls to ${sh.threshold}, roll ${total} (${d1},${d2}) — the walls hold.`,
+      );
+      for (const { order } of besiegers) {
+        note(order.army_id, `Siege of ${sh.name}: the walls hold (rolled ${total} vs threshold ${sh.threshold}). The siege continues.`);
+      }
+    }
+  }
+
+  // Orders targeting a hex with no (readable) Strongholds row can't be
+  // processed — keep them and warn rather than guessing.
+  for (const { order, target } of active) {
+    const known = strongholds.some((sh) => sh.hex_q === target.hex_q && sh.hex_r === target.hex_r);
+    if (!known) {
+      log.push(
+        `⚠️ **${armyName(order.army_id)}** is besieging (${target.hex_q},${target.hex_r}), but no Strongholds row matches that hex — siege skipped this tick.`,
+      );
+    }
+  }
+
+  return { changed, armyNotes };
+}
+
+// Morning tick: garrisons regroup while not under siege — threshold recovers
+// +1/day up to the type default. GM-set values above the default are left alone.
+export function recoverThresholds(strongholds: SheetStronghold[], log: Log): Set<number> {
+  const changed = new Set<number>();
+  for (const sh of strongholds) {
+    if (sh.siege_start !== null) continue;
+    if (sh.threshold >= DEFAULT_THRESHOLDS[sh.type]) continue;
+    sh.threshold += 1;
+    changed.add(sh.rowIndex);
+    log.push(`🛡️ **${sh.name}** recovers: threshold ${sh.threshold}/${DEFAULT_THRESHOLDS[sh.type]}.`);
+  }
+  return changed;
+}
+
+// The Strongholds tab is the live source of truth; the DB table is a mirror
+// so map rendering keeps working unchanged.
+export function syncStrongholdsToDb(
+  database: Database.Database,
+  strongholds: SheetStronghold[],
+  log: Log,
+): void {
+  const update = database.prepare(
+    `UPDATE strongholds SET garrison = ?, threshold = ?, controlled_by = ?
+     WHERE hex_id = (SELECT id FROM hexes WHERE q = ? AND r = ?)`,
+  );
+  for (const sh of strongholds) {
+    const result = update.run(sh.garrison, sh.threshold, sh.controlled_by, sh.hex_q, sh.hex_r);
+    if (result.changes === 0) {
+      log.push(
+        `⚠️ Strongholds row "${sh.name}" at (${sh.hex_q},${sh.hex_r}) has no seeded stronghold at that hex — not mirrored.`,
+      );
+    }
+  }
+}
+
+// Pings each army's channel with its night update (market results, siege news).
+export async function postNightUpdates(
+  database: Database.Database,
+  linesByArmy: Map<number, string[]>,
   client: Client,
   log: Log,
 ): Promise<void> {
-  for (const [armyId, lines] of sales) {
+  for (const [armyId, lines] of linesByArmy) {
     const row = database
       .prepare(
         `SELECT c.discord_user_id, c.discord_channel_id
@@ -397,7 +572,7 @@ export async function postSellNotifications(
       .get(armyId) as { discord_user_id: string; discord_channel_id: string | null } | undefined;
 
     if (!row?.discord_channel_id) {
-      log.push(`⚠️ Army ${armyId} sold goods but has no army channel to notify.`);
+      log.push(`⚠️ Army ${armyId} has night update news but no army channel to notify.`);
       continue;
     }
 
@@ -411,7 +586,7 @@ export async function postSellNotifications(
       }
     } catch (err) {
       log.push(
-        `⚠️ Failed to post market results for army ${armyId}: ${err instanceof Error ? err.message : String(err)}`,
+        `⚠️ Failed to post night update for army ${armyId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -516,6 +691,19 @@ function describeOrders(database: Database.Database, armyId: number): string {
         return 'Foraging';
       case 'sell':
         return 'Selling goods';
+      case 'siege': {
+        try {
+          const p = JSON.parse(order.parameters) as { hex_q: number; hex_r: number };
+          const sh = database
+            .prepare(
+              'SELECT s.name FROM strongholds s JOIN hexes h ON h.id = s.hex_id WHERE h.q = ? AND h.r = ?',
+            )
+            .get(p.hex_q, p.hex_r) as { name: string } | undefined;
+          return sh ? `Besieging ${sh.name}` : 'Besieging';
+        } catch {
+          return 'Besieging';
+        }
+      }
       case 'rest':
         return 'Resting';
       case 'torch':

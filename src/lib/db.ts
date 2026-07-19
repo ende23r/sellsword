@@ -138,7 +138,7 @@ export type FactionRow = {
 export type OrderRow = {
   id: number;
   army_id: number;
-  type: 'forage' | 'move' | 'rest' | 'torch' | 'sell';
+  type: 'forage' | 'move' | 'rest' | 'torch' | 'sell' | 'siege';
   parameters: string;
   created_at: string;
   processed_at: string | null;

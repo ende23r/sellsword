@@ -1,18 +1,29 @@
 import { OverwriteType, PermissionFlagsBits, type TextChannel } from 'discord.js';
 import db, { deleteConferenceChannel, getAllConferenceChannels, getCommanderByArmyId, type CommanderRow } from './db.js';
-import type { ArmySheetStats } from './sheets.js';
-import { extractSheetId, fetchArmyStats, fetchDemands, syncArmySheet, writeGoods } from './sheets.js';
+import type { ArmySheetStats, SheetStronghold } from './sheets.js';
+import {
+  extractSheetId,
+  fetchArmyStats,
+  fetchDemands,
+  fetchStrongholds,
+  syncArmySheet,
+  writeGoods,
+  writeStrongholdSiegeStates,
+} from './sheets.js';
 import {
   consumeSupplies,
   deliverMessages,
   formatTickDuration,
   postMovedArmyMaps,
-  postSellNotifications,
+  postNightUpdates,
   postSupplyUpdates,
   processForage,
   processMovement,
   processNightMarchMovement,
   processSellOrders,
+  processSieges,
+  recoverThresholds,
+  syncStrongholdsToDb,
   validateArmyPositions,
 } from './tick-processors.js';
 
@@ -37,6 +48,7 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
     consumeSupplies(db, statsMap, log);
     await postSupplyUpdates(db, statsMap, client, log);
     await postMovedArmyMaps(db, statsMap, client, log);
+    await runThresholdRecovery(log);
   }
 
   if (phase === 'night') {
@@ -50,7 +62,10 @@ export async function runDailyUpdate(phase: UpdatePhase, adminChannel: TextChann
     );
     const movedArmyIds = processMovement(db, statsMap, log);
     processForage(db, statsMap, log, movingArmyIds);
-    await runSellOrders(statsMap, client, log);
+    const nightLines = new Map<number, string[]>();
+    await runSellOrders(statsMap, nightLines, log);
+    await runSieges(statsMap, nightLines, log);
+    await postNightUpdates(db, nightLines, client, log);
     await removeMoversFromConferences(movedArmyIds, client);
   }
 
@@ -84,7 +99,7 @@ async function fetchAllArmyStats(log: string[]): Promise<Map<number, ArmySheetSt
 
 async function runSellOrders(
   statsMap: Map<number, ArmySheetStats>,
-  client: TextChannel['client'],
+  nightLines: Map<number, string[]>,
   log: string[],
 ): Promise<void> {
   const openSellOrders = (
@@ -126,7 +141,85 @@ async function runSellOrders(
     }
   }
 
-  await postSellNotifications(db, sales, client, log);
+  mergeLines(nightLines, sales);
+}
+
+// Fetches the Strongholds tab, runs siege processing, and writes back changed
+// rows. An unreadable tab skips all siege processing — never lifts sieges or
+// cancels orders on missing data.
+async function runSieges(
+  statsMap: Map<number, ArmySheetStats>,
+  nightLines: Map<number, string[]>,
+  log: string[],
+): Promise<void> {
+  const strongholds = await fetchStrongholdsOrWarn(log);
+  if (!strongholds) return;
+
+  const { changed, armyNotes } = processSieges(db, statsMap, strongholds, log);
+  mergeLines(nightLines, armyNotes);
+  await writeBackStrongholds(strongholds, changed, log);
+}
+
+// Morning tick: garrisons not under siege recover threshold toward the default.
+async function runThresholdRecovery(log: string[]): Promise<void> {
+  const strongholds = await fetchStrongholdsOrWarn(log);
+  if (!strongholds) return;
+
+  const changed = recoverThresholds(strongholds, log);
+  await writeBackStrongholds(strongholds, changed, log);
+}
+
+// Warns about an unreadable tab only when the game actually uses strongholds
+// (seeded in the DB or siege orders open) — a game without them shouldn't see
+// a warning every tick for a tab that was never created.
+async function fetchStrongholdsOrWarn(log: string[]): Promise<SheetStronghold[] | null> {
+  try {
+    const { strongholds, warnings } = await fetchStrongholds();
+    log.push(...warnings);
+    return strongholds;
+  } catch (err) {
+    const strongholdsSeeded =
+      (db.prepare('SELECT COUNT(*) AS n FROM strongholds').get() as { n: number }).n > 0;
+    const openSiegeOrders =
+      (
+        db
+          .prepare("SELECT COUNT(*) AS n FROM orders WHERE processed_at IS NULL AND type = 'siege'")
+          .get() as { n: number }
+      ).n > 0;
+    if (strongholdsSeeded || openSiegeOrders) {
+      log.push(
+        `⚠️ Could not read the Strongholds tab — siege processing skipped this tick: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return null;
+  }
+}
+
+async function writeBackStrongholds(
+  strongholds: SheetStronghold[],
+  changed: Set<number>,
+  log: string[],
+): Promise<void> {
+  const rows = strongholds.filter((sh) => changed.has(sh.rowIndex));
+  if (rows.length === 0) {
+    syncStrongholdsToDb(db, strongholds, log);
+    return;
+  }
+  try {
+    await writeStrongholdSiegeStates(rows);
+  } catch (err) {
+    log.push(
+      `⚠️ Failed to write siege state back to the Strongholds tab: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  syncStrongholdsToDb(db, strongholds, log);
+}
+
+function mergeLines(into: Map<number, string[]>, from: Map<number, string[]>): void {
+  for (const [armyId, lines] of from) {
+    if (!into.has(armyId)) into.set(armyId, []);
+    into.get(armyId)!.push(...lines);
+  }
 }
 
 async function syncSheets(statsMap: Map<number, ArmySheetStats>, log: string[]): Promise<void> {

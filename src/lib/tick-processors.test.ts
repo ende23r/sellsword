@@ -1,21 +1,24 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DB_SCHEMA } from './schema.js';
-import type { ArmySheetStats, Detachment } from './sheets.js';
+import type { ArmySheetStats, Detachment, SheetStronghold } from './sheets.js';
 import {
   consumeSupplies,
   deliverMessages,
   formatDateUTC,
   formatTickDuration,
   postMovedArmyMaps,
-  postSellNotifications,
+  postNightUpdates,
   postSupplyUpdates,
   processForage,
   processMovement,
   processNightMarchMovement,
   processSellOrders,
+  processSieges,
+  recoverThresholds,
   rollMarchMorale,
   supplyColor,
+  syncStrongholdsToDb,
   validateArmyPositions,
 } from './tick-processors.js';
 
@@ -302,9 +305,9 @@ describe('processSellOrders', () => {
   });
 });
 
-// ── postSellNotifications ─────────────────────────────────────────────────────
+// ── postNightUpdates ─────────────────────────────────────────────────────
 
-describe('postSellNotifications', () => {
+describe('postNightUpdates', () => {
   let db: Database.Database;
 
   beforeEach(() => {
@@ -328,7 +331,7 @@ describe('postSellNotifications', () => {
     const fetch = vi.fn().mockResolvedValue({ isTextBased: () => true, send });
     const mockClient = { channels: { fetch } };
 
-    await postSellNotifications(db, sales, mockClient as never, []);
+    await postNightUpdates(db, sales, mockClient as never, []);
 
     expect(fetch).toHaveBeenCalledWith('ch-army');
     expect(send).toHaveBeenCalledOnce();
@@ -344,7 +347,7 @@ describe('postSellNotifications', () => {
     const log: string[] = [];
     const mockClient = { channels: { fetch: vi.fn() } };
 
-    await postSellNotifications(db, sales, mockClient as never, log);
+    await postNightUpdates(db, sales, mockClient as never, log);
 
     expect(mockClient.channels.fetch).not.toHaveBeenCalled();
     expect(log.some((l) => l.includes('no army channel'))).toBe(true);
@@ -359,7 +362,7 @@ describe('postSellNotifications', () => {
       channels: { fetch: vi.fn().mockRejectedValue(new Error('Missing Access')) },
     };
 
-    await postSellNotifications(db, sales, mockClient as never, log);
+    await postNightUpdates(db, sales, mockClient as never, log);
 
     expect(log.some((l) => l.includes('Missing Access'))).toBe(true);
   });
@@ -474,6 +477,259 @@ describe('postMovedArmyMaps', () => {
       .prepare('SELECT moved_since_morning FROM armies WHERE id = ?')
       .get(id) as { moved_since_morning: number };
     expect(flag.moved_since_morning).toBe(1);
+  });
+});
+
+// ── processSieges ─────────────────────────────────────────────────────────────
+
+function makeStronghold(overrides: Partial<SheetStronghold> = {}): SheetStronghold {
+  return {
+    rowIndex: 2,
+    hex_q: 0,
+    hex_r: 0,
+    name: 'Highkeep',
+    type: 'town',
+    garrison: 500,
+    controlled_by: 'Empire',
+    threshold: 10,
+    siege_start: null,
+    last_roll: null,
+    ...overrides,
+  };
+}
+
+describe('processSieges', () => {
+  let db: Database.Database;
+  const NOW = new Date('2026-07-19T22:00:00Z');
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  function mockRoll(d1: number, d2: number) {
+    let i = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => {
+      const die = i++ % 2 === 0 ? d1 : d2;
+      return (die - 1) / 6;
+    });
+  }
+
+  it('starts a siege: sets Siege Start to today and notifies the army', () => {
+    const id = seedArmy(db, { name: 'Iron Legion' });
+    seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[id, makeStats()]]);
+    const sh = makeStronghold();
+    const log: string[] = [];
+
+    const { changed, armyNotes } = processSieges(db, stats, [sh], log, NOW);
+
+    expect(sh.siege_start).toBe('2026-07-19');
+    expect(changed.has(2)).toBe(true);
+    expect(log.join('\n')).toContain('Highkeep');
+    expect(armyNotes.get(id)!.join('\n')).toContain('Highkeep');
+  });
+
+  it('does not roll before 7 days of siege', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[id, makeStats()]]);
+    const sh = makeStronghold({ siege_start: '2026-07-16' });
+
+    const { changed } = processSieges(db, stats, [sh], [], NOW);
+
+    expect(sh.threshold).toBe(10);
+    expect(sh.last_roll).toBeNull();
+    expect(changed.size).toBe(0);
+  });
+
+  it('at 7 days: lowers threshold by 1, rolls 2d6, and records Last Roll on survival', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[id, makeStats()]]);
+    const sh = makeStronghold({ siege_start: '2026-07-12' });
+    mockRoll(2, 3); // total 5 ≤ new threshold 9 — holds
+    const log: string[] = [];
+
+    const { changed } = processSieges(db, stats, [sh], log, NOW);
+
+    expect(sh.threshold).toBe(9);
+    expect(sh.last_roll).toBe('2026-07-19');
+    expect(sh.siege_start).toBe('2026-07-12'); // siege continues
+    expect(changed.has(2)).toBe(true);
+    expect(log.join('\n')).toContain('5');
+  });
+
+  it('anchors the next roll on Last Roll, not Siege Start', () => {
+    const id = seedArmy(db);
+    seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[id, makeStats()]]);
+    const sh = makeStronghold({ siege_start: '2026-07-01', last_roll: '2026-07-17' });
+
+    const { changed } = processSieges(db, stats, [sh], [], NOW);
+
+    expect(sh.threshold).toBe(10);
+    expect(changed.size).toBe(0);
+  });
+
+  it('opens the gates when the roll beats the threshold', () => {
+    const id = seedArmy(db, { name: 'Iron Legion' });
+    const orderId = seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[id, makeStats()]]);
+    const sh = makeStronghold({ threshold: 3, siege_start: '2026-07-12' });
+    mockRoll(3, 3); // total 6 > new threshold 2 — gates open
+    const log: string[] = [];
+
+    const { armyNotes } = processSieges(db, stats, [sh], log, NOW);
+
+    expect(sh.siege_start).toBeNull();
+    expect(sh.last_roll).toBeNull();
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as {
+      processed_at: string | null;
+    };
+    expect(order.processed_at).not.toBeNull();
+    expect(log.join('\n')).toContain('gates');
+    expect(log.join('\n')).toContain('1 week'); // X for the 1d6−X capture rule
+    expect(armyNotes.get(id)!.join('\n')).toContain('gates');
+  });
+
+  it('cancels the order when the army is verifiably in another hex', () => {
+    const id = seedArmy(db);
+    const orderId = seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[id, makeStats({ hex_q: 5, hex_r: 5 })]]);
+    const sh = makeStronghold({ siege_start: '2026-07-16' });
+    const log: string[] = [];
+
+    processSieges(db, stats, [sh], log, NOW);
+
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as {
+      processed_at: string | null;
+    };
+    expect(order.processed_at).not.toBeNull();
+    expect(sh.siege_start).toBeNull(); // last besieger gone — siege lifted
+    expect(log.join('\n')).toContain('lifted');
+  });
+
+  it('keeps the siege when the army has no stats this tick (fetch failure)', () => {
+    const id = seedArmy(db);
+    const orderId = seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const sh = makeStronghold({ siege_start: '2026-07-16' });
+
+    processSieges(db, new Map(), [sh], [], NOW);
+
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as {
+      processed_at: string | null;
+    };
+    expect(order.processed_at).toBeNull();
+    expect(sh.siege_start).toBe('2026-07-16'); // not lifted
+  });
+
+  it('lifts the siege when no active siege orders remain', () => {
+    const sh = makeStronghold({ siege_start: '2026-07-10', last_roll: '2026-07-17' });
+    const log: string[] = [];
+
+    const { changed } = processSieges(db, new Map(), [sh], log, NOW);
+
+    expect(sh.siege_start).toBeNull();
+    expect(sh.last_roll).toBeNull();
+    expect(changed.has(2)).toBe(true);
+    expect(log.join('\n')).toContain('lifted');
+  });
+
+  it('warns and keeps the order when no Strongholds row matches the target hex', () => {
+    const id = seedArmy(db);
+    const orderId = seedOrder(db, id, 'siege', { hex_q: 9, hex_r: 9 });
+    const stats = new Map([[id, makeStats({ hex_q: 9, hex_r: 9 })]]);
+    const log: string[] = [];
+
+    processSieges(db, stats, [makeStronghold()], log, NOW);
+
+    const order = db.prepare('SELECT processed_at FROM orders WHERE id = ?').get(orderId) as {
+      processed_at: string | null;
+    };
+    expect(order.processed_at).toBeNull();
+    expect(log.join('\n')).toContain('(9,9)');
+  });
+});
+
+// ── recoverThresholds ─────────────────────────────────────────────────────────
+
+describe('recoverThresholds', () => {
+  it('recovers +1 per call while not under siege, up to the type default', () => {
+    const sh = makeStronghold({ threshold: 8 }); // town default 10
+    const changed = recoverThresholds([sh], []);
+    expect(sh.threshold).toBe(9);
+    expect(changed.has(2)).toBe(true);
+  });
+
+  it('does not recover past the type default', () => {
+    const sh = makeStronghold({ threshold: 10 });
+    const changed = recoverThresholds([sh], []);
+    expect(sh.threshold).toBe(10);
+    expect(changed.size).toBe(0);
+  });
+
+  it('leaves GM-set values above the default alone', () => {
+    const sh = makeStronghold({ threshold: 13 });
+    recoverThresholds([sh], []);
+    expect(sh.threshold).toBe(13);
+  });
+
+  it('does not recover while under siege', () => {
+    const sh = makeStronghold({ threshold: 5, siege_start: '2026-07-10' });
+    recoverThresholds([sh], []);
+    expect(sh.threshold).toBe(5);
+  });
+
+  it('uses the right default per type', () => {
+    const fortress = makeStronghold({ type: 'fortress', threshold: 19 });
+    const city = makeStronghold({ type: 'city', threshold: 15 });
+    recoverThresholds([fortress, city], []);
+    expect(fortress.threshold).toBe(20);
+    expect(city.threshold).toBe(15);
+  });
+});
+
+// ── syncStrongholdsToDb ───────────────────────────────────────────────────────
+
+describe('syncStrongholdsToDb', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = makeDb();
+    seq = 0;
+  });
+
+  function seedDbStronghold(db: Database.Database, q: number, r: number) {
+    seedHex(db, q, r);
+    const hexId = (
+      db.prepare('SELECT id FROM hexes WHERE q = ? AND r = ?').get(q, r) as { id: number }
+    ).id;
+    db.prepare(
+      "INSERT INTO strongholds (hex_id, name, type, garrison, threshold, controlled_by) VALUES (?, 'Highkeep', 'town', 500, 10, 'Empire')",
+    ).run(hexId);
+  }
+
+  it('mirrors sheet garrison, threshold, and controlled_by into the DB', () => {
+    seedDbStronghold(db, 0, 0);
+    const sh = makeStronghold({ garrison: 300, threshold: 7, controlled_by: 'Rebels' });
+
+    syncStrongholdsToDb(db, [sh], []);
+
+    const row = db.prepare('SELECT garrison, threshold, controlled_by FROM strongholds').get() as {
+      garrison: number;
+      threshold: number;
+      controlled_by: string | null;
+    };
+    expect(row).toEqual({ garrison: 300, threshold: 7, controlled_by: 'Rebels' });
+  });
+
+  it('warns when a sheet row has no DB stronghold at its hex', () => {
+    const log: string[] = [];
+    syncStrongholdsToDb(db, [makeStronghold({ hex_q: 4, hex_r: 4 })], log);
+    expect(log.join('\n')).toContain('(4,4)');
   });
 });
 
@@ -1100,6 +1356,25 @@ describe('postSupplyUpdates', () => {
     const desc = getEmbed(send).description ?? '';
     expect(desc).toContain('Moving to (3,-2) by road');
     expect(desc).toContain('Foraging');
+  });
+
+  it('describes a siege order with the stronghold name', async () => {
+    const id = seedArmy(db);
+    seedHex(db, 0, 0);
+    const hexId = (
+      db.prepare('SELECT id FROM hexes WHERE q = 0 AND r = 0').get() as { id: number }
+    ).id;
+    db.prepare(
+      "INSERT INTO strongholds (hex_id, name, type, garrison, threshold) VALUES (?, 'Highkeep', 'town', 500, 10)",
+    ).run(hexId);
+    seedOrder(db, id, 'siege', { hex_q: 0, hex_r: 0 });
+    const stats = new Map([[id, makeStats()]]);
+    db.prepare('UPDATE commanders SET discord_channel_id = ? WHERE id = ?').run('ch-1', id);
+
+    const send = vi.fn().mockResolvedValue(undefined);
+    await postSupplyUpdates(db, stats, makeClient(send) as never, [], new Date());
+
+    expect(getEmbed(send).description ?? '').toContain('Besieging Highkeep');
   });
 
   it('shows Orders: None when the army has no pending orders', async () => {

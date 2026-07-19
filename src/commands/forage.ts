@@ -44,7 +44,7 @@ const forage: Command = {
 
     // One live order at a time: cancel any existing move or forage order
     db.prepare(
-      "DELETE FROM orders WHERE army_id = ? AND type IN ('forage', 'move', 'sell') AND processed_at IS NULL",
+      "DELETE FROM orders WHERE army_id = ? AND type IN ('forage', 'move', 'sell', 'siege') AND processed_at IS NULL",
     ).run(army.id);
 
     db.prepare("INSERT INTO orders (army_id, type, parameters) VALUES (?, 'forage', '{}')").run(

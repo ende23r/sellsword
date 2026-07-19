@@ -260,6 +260,136 @@ export function parseDemands(rows: RawCell[][]): { demands: Demand[]; warnings: 
   return { demands, warnings };
 }
 
+// ── Strongholds (admin sheet "Strongholds" tab) ──────────────────────────────
+
+// Live source of truth for mutable stronghold state, GM-edited like Demands.
+// Columns: Hex | Name | Type | Garrison | Controlled By | Threshold |
+// Siege Start | Last Roll. The bot writes only the last three (F:H); the rest
+// are GM-owned. rowIndex is the 1-based sheet row, kept so writes can target
+// exactly those cells.
+export type SheetStronghold = {
+  rowIndex: number;
+  hex_q: number;
+  hex_r: number;
+  name: string;
+  type: 'fortress' | 'town' | 'city';
+  garrison: number;
+  controlled_by: string | null;
+  threshold: number;
+  siege_start: string | null; // ISO YYYY-MM-DD
+  last_roll: string | null;
+};
+
+// Sheets date serials count days since 1899-12-30. The bot writes ISO strings,
+// but a GM formatting the column as dates makes UNFORMATTED_VALUE return serials.
+function parseDateCell(v: RawCell): { iso: string | null } | { bad: string } {
+  if (blank(v)) return { iso: null };
+  if (typeof v === 'number' && isFinite(v) && v > 0) {
+    const ms = Date.UTC(1899, 11, 30) + Math.round(v) * 86400000;
+    return { iso: new Date(ms).toISOString().slice(0, 10) };
+  }
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return { iso: s };
+  return { bad: s };
+}
+
+export function parseStrongholds(rows: RawCell[][]): {
+  strongholds: SheetStronghold[];
+  warnings: string[];
+} {
+  const strongholds: SheetStronghold[] = [];
+  const warnings: string[] = [];
+
+  rows.forEach((row, i) => {
+    const [hex, name, type, garrison, controlledBy, threshold, siegeStart, lastRoll] = row;
+    if ([hex, name, type, garrison, controlledBy, threshold, siegeStart, lastRoll].every(blank))
+      return;
+
+    const skip = (why: string) =>
+      warnings.push(`⚠️ Strongholds row ${i + 1}: ${why} — row skipped.`);
+
+    const hexMatch = String(hex ?? '')
+      .trim()
+      .match(/^(-?\d+)\s*,\s*(-?\d+)$/);
+    if (!hexMatch) return skip(`hex "${String(hex ?? '').trim()}" is not "q,r"`);
+
+    const nameStr = String(name ?? '').trim();
+    if (!nameStr) return skip('name is missing');
+
+    const typeStr = String(type ?? '')
+      .trim()
+      .toLowerCase();
+    if (typeStr !== 'fortress' && typeStr !== 'town' && typeStr !== 'city')
+      return skip(`type "${String(type ?? '').trim()}" is not fortress/town/city`);
+
+    const garrisonNum = blank(garrison) ? 0 : Number(garrison);
+    if (isNaN(garrisonNum) || garrisonNum < 0)
+      return skip(`garrison "${String(garrison ?? '').trim()}" is not a valid number`);
+
+    const thresholdNum = Number(threshold);
+    if (blank(threshold) || isNaN(thresholdNum) || thresholdNum < 0)
+      return skip(`threshold "${String(threshold ?? '').trim()}" is not a valid number`);
+
+    const siegeStartDate = parseDateCell(siegeStart);
+    if ('bad' in siegeStartDate)
+      return skip(`siege start "${siegeStartDate.bad}" is not a date (YYYY-MM-DD)`);
+    const lastRollDate = parseDateCell(lastRoll);
+    if ('bad' in lastRollDate)
+      return skip(`last roll "${lastRollDate.bad}" is not a date (YYYY-MM-DD)`);
+
+    strongholds.push({
+      rowIndex: i + 2, // data starts at sheet row 2, below the header
+      hex_q: parseInt(hexMatch[1], 10),
+      hex_r: parseInt(hexMatch[2], 10),
+      name: nameStr,
+      type: typeStr,
+      garrison: Math.round(garrisonNum),
+      controlled_by: blank(controlledBy) ? null : String(controlledBy).trim(),
+      threshold: Math.round(thresholdNum),
+      siege_start: siegeStartDate.iso,
+      last_roll: lastRollDate.iso,
+    });
+  });
+
+  return { strongholds, warnings };
+}
+
+export async function fetchStrongholds(): Promise<{
+  strongholds: SheetStronghold[];
+  warnings: string[];
+}> {
+  const sheetId = process.env.ADMIN_SHEET_ID;
+  if (!sheetId) throw new Error('ADMIN_SHEET_ID is not set in .env');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: 'Strongholds!A2:H',
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  });
+  return parseStrongholds((res.data.values ?? []) as RawCell[][]);
+}
+
+// Writes only the bot-owned siege columns (F:H) of the given rows, so
+// concurrent GM edits to the other columns are never stomped.
+export async function writeStrongholdSiegeStates(
+  rows: Pick<SheetStronghold, 'rowIndex' | 'threshold' | 'siege_start' | 'last_roll'>[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const sheetId = process.env.ADMIN_SHEET_ID;
+  if (!sheetId) throw new Error('ADMIN_SHEET_ID is not set in .env');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      valueInputOption: 'RAW',
+      data: rows.map((r) => ({
+        range: `Strongholds!F${r.rowIndex}:H${r.rowIndex}`,
+        values: [[r.threshold, r.siege_start ?? '', r.last_roll ?? '']],
+      })),
+    },
+  });
+}
+
 export function parseSheetStats(
   cells: StatCells,
   infantryRows: RawCell[][],

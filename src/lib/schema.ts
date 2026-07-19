@@ -51,7 +51,7 @@ export const DB_SCHEMA = `
   CREATE TABLE IF NOT EXISTS orders (
     id           INTEGER PRIMARY KEY,
     army_id      INTEGER NOT NULL REFERENCES armies(id),
-    type         TEXT NOT NULL CHECK(type IN ('forage', 'move', 'rest', 'torch', 'sell')),
+    type         TEXT NOT NULL CHECK(type IN ('forage', 'move', 'rest', 'torch', 'sell', 'siege')),
     parameters   TEXT NOT NULL DEFAULT '{}',
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     processed_at TEXT
